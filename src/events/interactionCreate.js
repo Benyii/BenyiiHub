@@ -2,10 +2,20 @@
 const { MessageFlags, PermissionFlagsBits } = require('discord.js');
 const logger = require('../config/logger');
 const { sendErrorLogToGuild } = require('../services/logChannelService');
+const { handleRolePanelButton } = require('../services/rolePanelService');
 
 module.exports = {
   name: 'interactionCreate',
   async execute(interaction, client) {
+    // 🟢 Botones del panel de roles
+    if (interaction.isButton()) {
+      if (interaction.customId.startsWith('rolepanel:')) {
+        await handleRolePanelButton(interaction);
+      }
+      return;
+    }
+
+    // 🟣 Solo slash commands
     if (!interaction.isChatInputCommand()) return;
 
     const command = interaction.client.commands.get(interaction.commandName);
@@ -15,15 +25,17 @@ module.exports = {
       return;
     }
 
-    // 🔒 Validación extra para comandos de carpeta "admin"
+    // Validación extra de admin para comandos en carpeta admin
     if (command.isAdmin) {
       const member = interaction.member;
-
-      // Si por alguna razón no tenemos member (DM, etc.), bloquear igual
-      if (!member || !member.permissions?.has(PermissionFlagsBits.Administrator)) {
+      if (
+        !member ||
+        !member.permissions?.has(PermissionFlagsBits.Administrator)
+      ) {
         try {
           await interaction.reply({
-            content: '❌ No tienes permisos para usar este comando de administración.',
+            content:
+              '❌ No tienes permisos para usar este comando de administración.',
             flags: MessageFlags.Ephemeral
           });
         } catch (permErr) {
@@ -34,12 +46,10 @@ module.exports = {
     }
 
     try {
-      // Pasamos también client por si el comando lo necesita
       await command.execute(interaction, client);
     } catch (error) {
       logger.error('Error ejecutando comando:', error);
 
-      // Si la interacción ya expiró / es desconocida, no intentamos responder de nuevo
       if (error.code !== 10062) {
         try {
           const replyPayload = {
@@ -64,7 +74,7 @@ module.exports = {
         );
       }
 
-      // Log en el canal de logs del servidor (si hay)
+      // Log al canal de logs, si aplica
       if (interaction.guild) {
         try {
           const guildId = interaction.guild.id;
@@ -78,7 +88,8 @@ module.exports = {
             description += `Canal: <#${interaction.channel.id}> (${interaction.channel.id})\n`;
           }
 
-          description += 'Se ha producido una excepción durante la ejecución del comando.';
+          description +=
+            'Se ha producido una excepción durante la ejecución del comando.';
 
           await sendErrorLogToGuild(client, guildId, {
             title: 'Error ejecutando comando',
@@ -86,7 +97,10 @@ module.exports = {
             error
           });
         } catch (logError) {
-          logger.error('Error enviando log de error al canal de logs:', logError);
+          logger.error(
+            'Error enviando log de error al canal de logs:',
+            logError
+          );
         }
       }
     }

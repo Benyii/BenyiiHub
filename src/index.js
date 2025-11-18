@@ -10,6 +10,7 @@ const {
 } = require('discord.js');
 const { discord } = require('./config/config');
 const { startTwitchWatcher } = require('./services/twitchWatcher');
+const { reloadAllRolePanels } = require('./services/rolePanelService');
 const logger = require('./config/logger');
 
 // Intents necesarios para:
@@ -81,6 +82,7 @@ client.once(Events.ClientReady, (c) => {
 
   // Inicia el watcher de Twitch (anuncios de streams)
   startTwitchWatcher(client);
+  reloadAllRolePanels(client);
   logger.info('Twitch watcher iniciado.');
 });
 
