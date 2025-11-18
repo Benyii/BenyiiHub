@@ -5,6 +5,7 @@ const {
   PermissionsBitField
 } = require('discord.js');
 const { setLogChannel } = require('../../services/guildService');
+const { sendErrorLogToGuild, sendLogToGuild } = require('../../services/logChannelService');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -22,7 +23,7 @@ module.exports = {
     if (!interaction.guild) {
       return interaction.reply({
         content: 'Este comando solo puede usarse dentro de un servidor.',
-        flags: MessageFlags.Ephemeral
+        flags: 64
       });
     }
 
@@ -30,7 +31,7 @@ module.exports = {
     if (!interaction.memberPermissions.has(PermissionsBitField.Flags.Administrator)) {
       return interaction.reply({
         content: '❌ Solo administradores pueden configurar el canal de logs.',
-        flags: MessageFlags.Ephemeral
+        flags: 64
       });
     }
 
@@ -43,19 +44,33 @@ module.exports = {
 
       await interaction.reply({
         content: `✅ Canal de logs configurado correctamente: ${targetChannel}`,
-        flags: MessageFlags.Ephemeral
+        flags: 64
       });
 
-      // Mensaje público en el canal de logs
-      await targetChannel.send(
-        '📝 Este canal ha sido configurado como **canal de logs** del bot.\n' +
-        'Aquí se enviarán mensajes importantes relacionados con la actividad y eventos del servidor.'
-      );
+      // Mensaje informativo en el canal de logs usando embed "info"
+      await sendLogToGuild(interaction.client, guild.id, {
+        level: 'info',
+        title: 'Canal de logs configurado',
+        description:
+          `Este canal (${targetChannel}) ha sido configurado como **canal de logs** del bot.\n` +
+          `Comando ejecutado por: ${interaction.user.tag} (${interaction.user.id})`
+      });
     } catch (err) {
       console.error(err);
+
       await interaction.reply({
         content: '❌ Ocurrió un error configurando el canal de logs.',
-        flags: MessageFlags.Ephemeral
+        flags: 64
+      });
+
+      // Log de error (incluye stack truncado)
+      await sendErrorLogToGuild(interaction.client, guild.id, {
+        title: 'Error en /setlogchannel',
+        description:
+          `Ocurrió un error intentando configurar el canal de logs.\n` +
+          `Usuario: ${interaction.user.tag} (${interaction.user.id})\n` +
+          `Canal objetivo: ${targetChannel} (${targetChannel.id})`,
+        error: err
       });
     }
   }

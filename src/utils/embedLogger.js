@@ -1,4 +1,5 @@
 // src/utils/embedLogger.js
+
 /**
  * Devuelve el color según el tipo de log.
  *
@@ -53,6 +54,56 @@ function buildLogEmbed(client, { level, title, description }) {
   };
 }
 
+/**
+ * Construye un embed especializado para errores, con stack truncado.
+ *
+ * @param {import('discord.js').Client} client
+ * @param {Object} options
+ * @param {string} options.title
+ * @param {string} options.description
+ * @param {Error|string} options.error
+ */
+function buildErrorEmbed(client, { title, description, error }) {
+  const avatarUrl = client.user.displayAvatarURL();
+  const color = getColorByLevel('error');
+
+  let stack = '';
+  if (error instanceof Error) {
+    stack = error.stack || error.message || String(error);
+  } else {
+    stack = String(error);
+  }
+
+  const maxLen = 900; // espacio razonable para no reventar el embed
+  if (stack.length > maxLen) {
+    stack = stack.slice(0, maxLen - 3) + '...';
+  }
+
+  return {
+    title,
+    description,
+    color,
+    timestamp: new Date().toISOString(),
+    author: {
+      name: client.user.tag,
+      icon_url: avatarUrl
+    },
+    thumbnail: {
+      url: avatarUrl
+    },
+    footer: {
+      text: 'Nivel: ERROR'
+    },
+    fields: [
+      {
+        name: 'Detalle del error',
+        value: '```' + stack + '```'
+      }
+    ]
+  };
+}
+
 module.exports = {
-  buildLogEmbed
+  buildLogEmbed,
+  buildErrorEmbed
 };
