@@ -44,7 +44,7 @@ module.exports = {
 
       if (permDiff.length > 0) {
         const lines = permDiff
-          .map(d => `• **${d.permission}**: ${d.before} → ${d.after}`)
+          .map(d => `• **${d.permission}**: ${d.beforeIcon} → ${d.afterIcon}`)
           .join('\n');
         changes.push(`\n🔐 **Permisos del rol modificados:**\n${lines}`);
       }

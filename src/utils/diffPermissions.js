@@ -2,14 +2,32 @@
 const { PermissionFlagsBits } = require('discord.js');
 
 /**
- * Determina el estado de un permiso dado:
+ * Devuelve los emojis personalizados de toggleon/toggleoff si existen en el cache del cliente.
+ * @param {import('discord.js').Client} client
+ */
+function getToggleEmojis(client) {
+  const emojis = {
+    allow: 'ALLOW',
+    deny: 'DENY',
+    neutral: 'NEUTRAL'
+  };
+
+  if (!client || !client.emojis) return emojis;
+
+  const on = client.emojis.cache.find(e => e.name === 'toggleon');
+  const off = client.emojis.cache.find(e => e.name === 'toggleoff');
+
+  if (on) emojis.allow = `<:${on.name}:${on.id}>`;
+  if (off) emojis.deny = `<:${off.name}:${off.id}>`;
+
+  return emojis;
+}
+
+/**
+ * Determina el estado de un permiso:
  *  - "ALLOW"
  *  - "DENY"
  *  - "NEUTRAL"
- *
- * @param {bigint} allowBits
- * @param {bigint} denyBits
- * @param {bigint} bit
  */
 function resolvePermissionState(allowBits, denyBits, bit) {
   if ((allowBits & bit) === bit) return 'ALLOW';
@@ -18,17 +36,16 @@ function resolvePermissionState(allowBits, denyBits, bit) {
 }
 
 /**
- * Diff de overwrites de canal (permiso por permiso).
- *
- * oldOverwrite / newOverwrite son PermissionOverwrites de discord.js
- * Retorna array de:
- *  { permission: 'SendMessages', before: 'DENY', after: 'ALLOW' }
+ * Diff entre overwrites de canal
  */
-function diffOverwritePerms(oldOverwrite, newOverwrite) {
+function diffOverwritePerms(oldOverwrite, newOverwrite, client) {
   const oldAllow = BigInt(oldOverwrite.allow?.bitfield ?? 0n);
   const oldDeny  = BigInt(oldOverwrite.deny?.bitfield ?? 0n);
   const newAllow = BigInt(newOverwrite.allow?.bitfield ?? 0n);
   const newDeny  = BigInt(newOverwrite.deny?.bitfield ?? 0n);
+
+  const { allow: allowEmoji, deny: denyEmoji, neutral: neutralEmoji } =
+    getToggleEmojis(client);
 
   const changes = [];
 
@@ -40,7 +57,13 @@ function diffOverwritePerms(oldOverwrite, newOverwrite) {
       changes.push({
         permission: permName,
         before,
-        after
+        beforeIcon: before === 'ALLOW' ? allowEmoji :
+                     before === 'DENY' ?  denyEmoji :
+                     neutralEmoji,
+        after,
+        afterIcon: after === 'ALLOW' ? allowEmoji :
+                    after === 'DENY' ?  denyEmoji :
+                    neutralEmoji
       });
     }
   }
@@ -49,15 +72,14 @@ function diffOverwritePerms(oldOverwrite, newOverwrite) {
 }
 
 /**
- * Diff de permisos de un rol completo.
- *
- * Recibe oldRole y newRole (Role de discord.js)
- * Retorna array de:
- *  { permission: 'ManageChannels', before: 'ALLOW', after: 'DENY' }
+ * Diff entre roles
  */
-function diffRolePermissions(oldRole, newRole) {
+function diffRolePermissions(oldRole, newRole, client) {
   const oldBits = BigInt(oldRole.permissions?.bitfield ?? 0n);
   const newBits = BigInt(newRole.permissions?.bitfield ?? 0n);
+
+  const { allow: allowEmoji, deny: denyEmoji, neutral: neutralEmoji } =
+    getToggleEmojis(client);
 
   const changes = [];
 
@@ -66,10 +88,15 @@ function diffRolePermissions(oldRole, newRole) {
     const hasNow    = (newBits & bit) === bit;
 
     if (hadBefore !== hasNow) {
+      const before = hadBefore ? 'ALLOW' : 'DENY';
+      const after  = hasNow ? 'ALLOW' : 'DENY';
+
       changes.push({
         permission: permName,
-        before: hadBefore ? 'ALLOW' : 'DENY',
-        after:  hasNow    ? 'ALLOW' : 'DENY'
+        before,
+        beforeIcon: before === 'ALLOW' ? allowEmoji : denyEmoji,
+        after,
+        afterIcon: after === 'ALLOW' ? allowEmoji  : denyEmoji
       });
     }
   }

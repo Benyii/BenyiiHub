@@ -70,7 +70,7 @@ module.exports = {
               : `Rol <@&${id}>`;
 
           const lines = diff
-            .map(d => `• **${d.permission}**: ${d.before} → ${d.after}`)
+            .map(d => `• **${d.permission}**: ${d.beforeIcon} → ${d.afterIcon}`)
             .join('\n');
 
           changes.push(
