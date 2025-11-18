@@ -482,7 +482,9 @@ async function getWelcomeBoostSettings(guildId) {
       `SELECT welcome_channel_id,
               welcome_enabled,
               boost_channel_id,
-              boost_enabled
+              boost_enabled,
+              short_guild_name,
+              welcome_custom_message
        FROM guilds
        WHERE id = ?`,
       [guildId]
@@ -491,6 +493,34 @@ async function getWelcomeBoostSettings(guildId) {
   } catch (err) {
     logger.error('Error en getWelcomeBoostSettings:', err);
     return null;
+  }
+}
+
+async function setShortGuildName(guildId, shortName) {
+  try {
+    await pool.execute(
+      `UPDATE guilds
+       SET short_guild_name = ?
+       WHERE id = ?`,
+      [shortName || null, guildId]
+    );
+  } catch (err) {
+    logger.error('Error en setShortGuildName:', err);
+    throw err;
+  }
+}
+
+async function setWelcomeCustomMessage(guildId, message) {
+  try {
+    await pool.execute(
+      `UPDATE guilds
+       SET welcome_custom_message = ?
+       WHERE id = ?`,
+      [message || null, guildId]
+    );
+  } catch (err) {
+    logger.error('Error en setWelcomeCustomMessage:', err);
+    throw err;
   }
 }
 
@@ -519,5 +549,7 @@ module.exports = {
   getStreamAnnounceChannel,
   setWelcomeChannel,
   setBoostChannel,
-  getWelcomeBoostSettings
+  getWelcomeBoostSettings,
+  setShortGuildName,
+  setWelcomeCustomMessage
 };

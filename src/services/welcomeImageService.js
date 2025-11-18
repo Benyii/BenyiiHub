@@ -1,4 +1,3 @@
-// src/services/welcomeImageService.js
 const path = require('node:path');
 const { AttachmentBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
@@ -6,13 +5,11 @@ const logger = require('../config/logger');
 
 const BANNER_PATH = path.join(__dirname, '..', 'assets', 'welcome_banner.png');
 
-// Coordenadas aproximadas del círculo (puedes ajustarlas si quieres)
-const AVATAR_RADIUS = 130;
-const AVATAR_CENTER_Y_FACTOR = 0.35; // 35% de la altura (un poco arriba del centro)
+// Banner pensado en 1920x1080
+// Avatar aún más grande y centrado
+const AVATAR_RADIUS = 230;
+const AVATAR_CENTER_Y_FACTOR = 0.45; // 45% de alto
 
-/**
- * Dibuja el banner base y retorna { canvas, ctx }
- */
 async function createBaseCanvas() {
   const banner = await loadImage(BANNER_PATH);
   const canvas = createCanvas(banner.width, banner.height);
@@ -23,12 +20,11 @@ async function createBaseCanvas() {
   return { canvas, ctx };
 }
 
-/**
- * Dibuja el avatar circular en el centro superior.
- */
 async function drawAvatar(ctx, canvas, member) {
+  const isAnimated = member.user.avatar && member.user.avatar.startsWith('a_');
+
   const avatarURL = member.user.displayAvatarURL({
-    extension: 'png',
+    extension: isAnimated ? 'gif' : 'png',
     size: 512
   });
 
@@ -47,60 +43,76 @@ async function drawAvatar(ctx, canvas, member) {
   ctx.drawImage(avatar, cx - r, cy - r, r * 2, r * 2);
   ctx.restore();
 
-  // Borde alrededor del avatar
+  // Borde blanco
   ctx.beginPath();
-  ctx.lineWidth = 12;
-  ctx.strokeStyle = '#D9D9D9';
-  ctx.arc(cx, cy, r + 6, 0, Math.PI * 2, true);
+  ctx.lineWidth = 16;
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.arc(cx, cy, r + 10, 0, Math.PI * 2, true);
+  ctx.stroke();
+
+  // Borde exterior oscuro suave
+  ctx.beginPath();
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = '#00000088';
+  ctx.arc(cx, cy, r + 22, 0, Math.PI * 2, true);
   ctx.stroke();
 }
 
 /**
- * Escribe nombre + "Bienvenido/a" o texto custom.
+ * Texto blanco con borde negro.
+ * mode = 'welcome' o 'boost'
  */
-function drawTextWelcome(ctx, canvas, member, mode = 'welcome') {
+function drawText(ctx, canvas, member, mode, shortGuildName) {
   const displayName = member.displayName || member.user.username;
   const cx = canvas.width / 2;
 
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#6b6b6b';
-  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-  ctx.lineWidth = 4;
+  ctx.fillStyle = '#FFFFFF';
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 6;
 
   if (mode === 'welcome') {
     // Nombre
-    ctx.font = 'bold 64px Sans';
-    const nameY = canvas.height - 110;
+    ctx.font = 'bold 80px Sans';
+    const nameY = canvas.height - 210;
     ctx.strokeText(displayName, cx, nameY);
     ctx.fillText(displayName, cx, nameY);
 
-    // Bienvenido/a
-    ctx.font = 'bold 80px Sans';
-    const welcomeY = canvas.height - 30;
-    const text = 'Bienvenido/a';
-    ctx.strokeText(text, cx, welcomeY);
-    ctx.fillText(text, cx, welcomeY);
+    // "Bienvenido/a"
+    ctx.font = 'bold 96px Sans';
+    const welcomeY = canvas.height - 115;
+    const text1 = 'Bienvenido/a';
+    ctx.strokeText(text1, cx, welcomeY);
+    ctx.fillText(text1, cx, welcomeY);
+
+    // "al servidor (Nombre)"
+    const serverName = shortGuildName || 'al servidor';
+    ctx.font = 'bold 72px Sans';
+    const serverY = canvas.height - 30;
+    const text2 = `al servidor (${serverName})`;
+    ctx.strokeText(text2, cx, serverY);
+    ctx.fillText(text2, cx, serverY);
   } else if (mode === 'boost') {
     // Nombre
-    ctx.font = 'bold 64px Sans';
-    const nameY = canvas.height - 120;
+    ctx.font = 'bold 80px Sans';
+    const nameY = canvas.height - 180;
     ctx.strokeText(displayName, cx, nameY);
     ctx.fillText(displayName, cx, nameY);
 
     // Texto de boost
-    ctx.font = 'bold 60px Sans';
-    const boostY = canvas.height - 40;
+    ctx.font = 'bold 72px Sans';
+    const boostY = canvas.height - 70;
     const text = 'ha boosteado el servidor 💜';
     ctx.strokeText(text, cx, boostY);
     ctx.fillText(text, cx, boostY);
   }
 }
 
-async function generateWelcomeImage(member) {
+async function generateWelcomeImage(member, shortGuildName) {
   try {
     const { canvas, ctx } = await createBaseCanvas();
     await drawAvatar(ctx, canvas, member);
-    drawTextWelcome(ctx, canvas, member, 'welcome');
+    drawText(ctx, canvas, member, 'welcome', shortGuildName);
 
     const buffer = canvas.toBuffer('image/png');
     return new AttachmentBuilder(buffer, {
@@ -116,7 +128,7 @@ async function generateBoostImage(member) {
   try {
     const { canvas, ctx } = await createBaseCanvas();
     await drawAvatar(ctx, canvas, member);
-    drawTextWelcome(ctx, canvas, member, 'boost');
+    drawText(ctx, canvas, member, 'boost');
 
     const buffer = canvas.toBuffer('image/png');
     return new AttachmentBuilder(buffer, {

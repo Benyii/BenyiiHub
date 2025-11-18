@@ -1,4 +1,3 @@
-// src/events/guildMemberAdd.js
 const { sendAdminEventLog } = require('../services/adminEventLogService');
 const { getWelcomeBoostSettings } = require('../services/guildService');
 const { generateWelcomeImage } = require('../services/welcomeImageService');
@@ -26,38 +25,47 @@ module.exports = {
         `Cuenta creada: <t:${createdTs}:F> (<t:${createdTs}:R>)\n` +
         `Se unió al servidor: <t:${joinedTs}:F> (<t:${joinedTs}:R>)`;
 
-      // 🔹 Log administrativo (lo que ya tenías)
+      // Log administrativo
       await sendAdminEventLog(client, guildId, {
         title: 'Nuevo miembro ingresó al servidor',
         description
       });
 
-      // 🔹 Mensaje de bienvenida con imagen personalizada
+      // Bienvenida visual
       const settings = await getWelcomeBoostSettings(guildId);
 
       if (
-        settings &&
-        settings.welcome_enabled &&
-        settings.welcome_channel_id
+        !settings ||
+        !settings.welcome_enabled ||
+        !settings.welcome_channel_id
       ) {
-        const channel = guild.channels.cache.get(
-          settings.welcome_channel_id
-        );
+        return;
+      }
 
-        if (channel && channel.isTextBased()) {
-          const attachment = await generateWelcomeImage(member);
-          const content = `🎉 ¡Bienvenido/a ${member} al servidor!`;
+      const channel = guild.channels.cache.get(settings.welcome_channel_id);
+      if (!channel || !channel.isTextBased()) return;
 
-          if (attachment) {
-            await channel.send({
-              content,
-              files: [attachment]
-            });
-          } else {
-            // fallback si falla la generación de imagen
-            await channel.send({ content });
-          }
-        }
+      const shortName = settings.short_guild_name || guild.name;
+
+      // Mensaje custom
+      const template =
+        settings.welcome_custom_message ||
+        '🎉 {mention}, ¡bienvenido/a al servidor {server}!';
+
+      const content = template
+        .replace(/\{user\}/gi, user.username)
+        .replace(/\{mention\}/gi, `${member}`)
+        .replace(/\{server\}/gi, shortName);
+
+      const attachment = await generateWelcomeImage(member, shortName);
+
+      if (attachment) {
+        await channel.send({
+          content,
+          files: [attachment]
+        });
+      } else {
+        await channel.send({ content });
       }
     } catch (err) {
       logger.error('Error en guildMemberAdd event:', err);

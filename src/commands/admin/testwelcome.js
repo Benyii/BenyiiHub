@@ -1,3 +1,5 @@
+// src/commands/admin/testwelcome.js
+
 const {
   SlashCommandBuilder,
   PermissionFlagsBits,
@@ -51,41 +53,63 @@ module.exports = {
         return interaction.editReply('❌ No encontré ese usuario en este servidor.');
       }
 
+      // Obtener configuración del servidor
       const settings = await getWelcomeBoostSettings(interaction.guild.id);
 
-      let channelId = null;
+      if (!settings) {
+        return interaction.editReply('❌ El servidor no tiene configuración de bienvenida o boost.');
+      }
 
-      if (tipo === 'welcome') channelId = settings?.welcome_channel_id;
-      if (tipo === 'boost') channelId = settings?.boost_channel_id;
+      // Canal correspondiente
+      let channelId = null;
+      if (tipo === 'welcome') channelId = settings.welcome_channel_id;
+      if (tipo === 'boost') channelId = settings.boost_channel_id;
 
       if (!channelId) {
         return interaction.editReply(`❌ No hay un canal configurado para **${tipo}**.`);
       }
 
       const channel = interaction.guild.channels.cache.get(channelId);
-
       if (!channel || !channel.isTextBased()) {
         return interaction.editReply('❌ El canal configurado no es válido.');
       }
 
+      // Determinar nombre corto
+      const shortName =
+        settings.short_guild_name ||
+        interaction.guild.name;
+
+      // Determinar mensaje custom
+      let template = settings.welcome_custom_message;
+      if (!template || tipo === 'boost') {
+        // Para boost usamos fallback diferente
+        template = tipo === 'welcome'
+          ? '🎉 {mention}, ¡bienvenido/a al servidor {server}!'
+          : '💜 {mention} ha boosteado el servidor {server}!';
+      }
+
+      const content = template
+        .replace(/\{user\}/gi, user.username)
+        .replace(/\{mention\}/gi, `${member}`)
+        .replace(/\{server\}/gi, shortName);
+
       // Generar imagen
-      const attachment =
-        tipo === 'welcome'
-          ? await generateWelcomeImage(member)
-          : await generateBoostImage(member);
+      let attachment = null;
 
-      const content =
-        tipo === 'welcome'
-          ? `🔧 **TEST** — Simulando bienvenida para ${member}`
-          : `🔧 **TEST** — Simulando boost para ${member}`;
+      if (tipo === 'welcome') {
+        attachment = await generateWelcomeImage(member, shortName);
+      } else {
+        attachment = await generateBoostImage(member);
+      }
 
+      // Enviar al canal configurado
       if (attachment) {
         await channel.send({
           content,
           files: [attachment]
         });
       } else {
-        await channel.send(content + ' (⚠️ No se pudo generar la imagen)');
+        await channel.send(content + ' ⚠️ (No se pudo generar la imagen)');
       }
 
       await interaction.editReply('✅ Test enviado correctamente.');
