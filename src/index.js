@@ -1,12 +1,15 @@
+// src/index.js
 const fs = require('node:fs');
 const path = require('node:path');
 const {
   Client,
   Collection,
   GatewayIntentBits,
-  Partials
+  Partials,
+  Events
 } = require('discord.js');
 const { discord } = require('./config/config');
+const { startTwitchWatcher } = require('./services/twitchWatcher');
 const logger = require('./config/logger');
 
 // Intents necesarios para:
@@ -21,18 +24,27 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMembers
   ],
-  partials: [Partials.Channel, Partials.GuildMember, Partials.Message, Partials.User]
+  partials: [
+    Partials.Channel,
+    Partials.GuildMember,
+    Partials.Message,
+    Partials.User
+  ]
 });
 
 client.commands = new Collection();
 
-// Cargar comandos
+// ────────────────────────────────
+// Cargar comandos (subcarpetas dentro de src/commands)
+// ────────────────────────────────
 const commandsPath = path.join(__dirname, 'commands');
 const commandFolders = fs.readdirSync(commandsPath);
 
 for (const folder of commandFolders) {
   const folderPath = path.join(commandsPath, folder);
-  const commandFiles = fs.readdirSync(folderPath).filter(file => file.endsWith('.js'));
+  const commandFiles = fs
+    .readdirSync(folderPath)
+    .filter(file => file.endsWith('.js'));
 
   for (const file of commandFiles) {
     const filePath = path.join(folderPath, file);
@@ -46,7 +58,10 @@ for (const folder of commandFolders) {
   }
 }
 
-// Cargar eventos
+// ────────────────────────────────
+// Cargar eventos (archivos en src/events)
+// Cada archivo exporta { name, execute, once? }
+// ────────────────────────────────
 const eventsPath = path.join(__dirname, 'events');
 const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
 
@@ -61,6 +76,23 @@ for (const file of eventFiles) {
   }
 }
 
+// ────────────────────────────────
+// Evento de cliente listo (ClientReady)
+// Aquí arrancamos el watcher de Twitch
+// ────────────────────────────────
+client.once(Events.ClientReady, (c) => {
+  logger.info(`Bot iniciado como ${c.user.tag}`);
+
+  // Inicia el watcher de Twitch (anuncios de streams)
+  startTwitchWatcher(client);
+  logger.info('Twitch watcher iniciado.');
+});
+
+// ────────────────────────────────
+// Login del bot
+// ────────────────────────────────
 client.login(discord.token).catch(err => {
   logger.error('Error al iniciar sesión en Discord:', err);
 });
+
+module.exports = client;

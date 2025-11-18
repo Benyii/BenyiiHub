@@ -348,6 +348,105 @@ async function setAdminLogFlag(guildId, enabled) {
   }
 }
 
+/* ──────────────────────────────── */
+/* ROLES DE PING (NEWS / STREAMS)  */
+/* ──────────────────────────────── */
+
+async function setNewsPingRole(guildId, roleId) {
+  const sql = `
+    INSERT INTO guilds (id, name, news_ping_role_id)
+    VALUES (?, '', ?)
+    ON DUPLICATE KEY UPDATE
+      news_ping_role_id = VALUES(news_ping_role_id),
+      updated_at = CURRENT_TIMESTAMP;
+  `;
+  try {
+    await pool.execute(sql, [guildId, roleId]);
+    logger.info(`News ping role configurado para guild ${guildId}: ${roleId}`);
+  } catch (err) {
+    logger.error(`Error configurando news_ping_role_id para guild ${guildId}:`, err);
+  }
+}
+
+async function getNewsPingRole(guildId) {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT news_ping_role_id FROM guilds WHERE id = ?',
+      [guildId]
+    );
+    if (!rows.length) return null;
+    return rows[0].news_ping_role_id || null;
+  } catch (err) {
+    logger.error(`Error obteniendo news_ping_role_id para guild ${guildId}:`, err);
+    return null;
+  }
+}
+
+async function setStreamsPingRole(guildId, roleId) {
+  const sql = `
+    INSERT INTO guilds (id, name, streams_ping_role_id)
+    VALUES (?, '', ?)
+    ON DUPLICATE KEY UPDATE
+      streams_ping_role_id = VALUES(streams_ping_role_id),
+      updated_at = CURRENT_TIMESTAMP;
+  `;
+  try {
+    await pool.execute(sql, [guildId, roleId]);
+    logger.info(`Streams ping role configurado para guild ${guildId}: ${roleId}`);
+  } catch (err) {
+    logger.error(`Error configurando streams_ping_role_id para guild ${guildId}:`, err);
+  }
+}
+
+async function getStreamsPingRole(guildId) {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT streams_ping_role_id FROM guilds WHERE id = ?',
+      [guildId]
+    );
+    if (!rows.length) return null;
+    return rows[0].streams_ping_role_id || null;
+  } catch (err) {
+    logger.error(`Error obteniendo streams_ping_role_id para guild ${guildId}:`, err);
+    return null;
+  }
+}
+
+/* ──────────────────────────────── */
+/* CANAL DE ANUNCIOS DE STREAMS    */
+/* ──────────────────────────────── */
+
+async function setStreamAnnounceChannel(guildId, channelId) {
+  const sql = `
+    INSERT INTO guilds (id, name, stream_announce_channel_id)
+    VALUES (?, '', ?)
+    ON DUPLICATE KEY UPDATE
+      stream_announce_channel_id = VALUES(stream_announce_channel_id),
+      updated_at = CURRENT_TIMESTAMP;
+  `;
+  try {
+    await pool.execute(sql, [guildId, channelId]);
+    logger.info(`Stream announce channel configurado para guild ${guildId}: ${channelId}`);
+  } catch (err) {
+    logger.error(`Error configurando stream_announce_channel_id para guild ${guildId}:`, err);
+  }
+}
+
+async function getStreamAnnounceChannel(guildId) {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT stream_announce_channel_id FROM guilds WHERE id = ?',
+      [guildId]
+    );
+    if (!rows.length) return null;
+    return rows[0].stream_announce_channel_id || null;
+  } catch (err) {
+    logger.error(`Error obteniendo stream_announce_channel_id para guild ${guildId}:`, err);
+    return null;
+  }
+}
+
+
 module.exports = {
   syncGuilds,
   upsertGuild,
@@ -364,5 +463,10 @@ module.exports = {
   setAdminEventLogChannel,
   getAdminEventLogChannel,
   getAdminLogFlag,
-  setAdminLogFlag
+  setAdminLogFlag,
+  setNewsPingRole,
+  getNewsPingRole,
+  getStreamsPingRole,
+  setStreamAnnounceChannel,
+  getStreamAnnounceChannel
 };
