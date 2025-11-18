@@ -24,19 +24,12 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMembers
   ],
-  partials: [
-    Partials.Channel,
-    Partials.GuildMember,
-    Partials.Message,
-    Partials.User
-  ]
+  partials: [Partials.Channel, Partials.GuildMember, Partials.Message, Partials.User]
 });
 
 client.commands = new Collection();
 
-// ────────────────────────────────
-// Cargar comandos (subcarpetas dentro de src/commands)
-// ────────────────────────────────
+// Cargar comandos
 const commandsPath = path.join(__dirname, 'commands');
 const commandFolders = fs.readdirSync(commandsPath);
 
@@ -49,19 +42,25 @@ for (const folder of commandFolders) {
   for (const file of commandFiles) {
     const filePath = path.join(folderPath, file);
     const command = require(filePath);
+
     if ('data' in command && 'execute' in command) {
+      // 🔒 Si el comando está en la carpeta "admin", márcalo como solo-admin
+      if (folder.toLowerCase() === 'admin') {
+        command.isAdmin = true;
+      }
+
       client.commands.set(command.data.name, command);
-      logger.info(`Comando cargado: ${command.data.name}`);
+      logger.info(
+        `Comando cargado: ${command.data.name}` +
+        (command.isAdmin ? ' (ADMIN ONLY)' : '')
+      );
     } else {
       logger.warn(`Comando inválido en ${filePath}`);
     }
   }
 }
 
-// ────────────────────────────────
-// Cargar eventos (archivos en src/events)
-// Cada archivo exporta { name, execute, once? }
-// ────────────────────────────────
+// Cargar eventos
 const eventsPath = path.join(__dirname, 'events');
 const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
 
@@ -76,10 +75,7 @@ for (const file of eventFiles) {
   }
 }
 
-// ────────────────────────────────
-// Evento de cliente listo (ClientReady)
-// Aquí arrancamos el watcher de Twitch
-// ────────────────────────────────
+// Evento de cliente listo
 client.once(Events.ClientReady, (c) => {
   logger.info(`Bot iniciado como ${c.user.tag}`);
 
@@ -88,9 +84,7 @@ client.once(Events.ClientReady, (c) => {
   logger.info('Twitch watcher iniciado.');
 });
 
-// ────────────────────────────────
 // Login del bot
-// ────────────────────────────────
 client.login(discord.token).catch(err => {
   logger.error('Error al iniciar sesión en Discord:', err);
 });

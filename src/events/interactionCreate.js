@@ -1,12 +1,11 @@
 // src/events/interactionCreate.js
-const { MessageFlags } = require('discord.js');
+const { MessageFlags, PermissionFlagsBits } = require('discord.js');
 const logger = require('../config/logger');
 const { sendErrorLogToGuild } = require('../services/logChannelService');
 
 module.exports = {
   name: 'interactionCreate',
   async execute(interaction, client) {
-    // Solo slash commands
     if (!interaction.isChatInputCommand()) return;
 
     const command = interaction.client.commands.get(interaction.commandName);
@@ -16,15 +15,32 @@ module.exports = {
       return;
     }
 
+    // 🔒 Validación extra para comandos de carpeta "admin"
+    if (command.isAdmin) {
+      const member = interaction.member;
+
+      // Si por alguna razón no tenemos member (DM, etc.), bloquear igual
+      if (!member || !member.permissions?.has(PermissionFlagsBits.Administrator)) {
+        try {
+          await interaction.reply({
+            content: '❌ No tienes permisos para usar este comando de administración.',
+            flags: MessageFlags.Ephemeral
+          });
+        } catch (permErr) {
+          logger.error('Error respondiendo falta de permisos:', permErr);
+        }
+        return;
+      }
+    }
+
     try {
-      // 👈 importante pasar también el client por si los comandos lo usan
+      // Pasamos también client por si el comando lo necesita
       await command.execute(interaction, client);
     } catch (error) {
       logger.error('Error ejecutando comando:', error);
 
-      // Si la interacción ya no existe / expiró, no intentamos responder
+      // Si la interacción ya expiró / es desconocida, no intentamos responder de nuevo
       if (error.code !== 10062) {
-        // Respuesta al usuario (ephemeral usando flags)
         try {
           const replyPayload = {
             content:
@@ -38,12 +54,8 @@ module.exports = {
             await interaction.reply(replyPayload);
           }
         } catch (replyError) {
-          // Si aquí también da 10062, simplemente lo logueamos y seguimos
           if (replyError.code !== 10062) {
-            logger.error(
-              'Error enviando respuesta de error al usuario:',
-              replyError
-            );
+            logger.error('Error enviando respuesta de error al usuario:', replyError);
           }
         }
       } else {

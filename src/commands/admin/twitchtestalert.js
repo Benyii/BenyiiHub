@@ -137,8 +137,8 @@ module.exports = {
         }
 
         const content =
-          `🧪 [TEST] 🎉 **${stream.user_name}** 🎉 está en directo: ${streamTitle} - ` +
-          `Jugando: ${gameName}, ¿qué esperas para saludar un rato? ${pingRoleMention}`.trim();
+          `🎉**${stream.user_name}** 🎉 está en directo: **${streamTitle}** - ` +
+          `**Jugando**: ${gameName}, ¿qué esperas para saludar un rato? ${pingRoleMention}`.trim();
 
         try {
           await announceChannel.send({ content, embeds: [embed] });
