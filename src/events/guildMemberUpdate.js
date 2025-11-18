@@ -1,6 +1,8 @@
 // src/events/guildMemberUpdate.js
 const { sendAdminEventLog } = require('../services/adminEventLogService');
 const { AuditLogEvent, getExecutorLine, getExecutorAndReason } = require('../utils/auditLogHelper');
+const { getWelcomeBoostSettings } = require('../services/guildService');
+const { generateBoostImage } = require('../services/welcomeImageService');
 const logger = require('../config/logger');
 
 module.exports = {
@@ -15,7 +17,37 @@ module.exports = {
       const userTag = `${user.tag} (${user.id})`;
       const nowTs = Math.floor(Date.now() / 1000);
 
-      // ---- Cambio de nickname ----
+      /* ──────────────────────────────── */
+      /* 🔹 Detectar nuevo boost          */
+      /* ──────────────────────────────── */
+      const hadBoost = !!oldMember.premiumSince;
+      const hasBoost = !!newMember.premiumSince;
+
+      if (!hadBoost && hasBoost) {
+        const settings = await getWelcomeBoostSettings(guildId);
+
+        if (settings && settings.boost_enabled && settings.boost_channel_id) {
+          const channel = guild.channels.cache.get(settings.boost_channel_id);
+
+          if (channel && channel.isTextBased()) {
+            const attachment = await generateBoostImage(newMember);
+            const content = `💜 ¡${newMember} acaba de boostear el servidor!`;
+
+            if (attachment) {
+              await channel.send({
+                content,
+                files: [attachment]
+              });
+            } else {
+              await channel.send({ content });
+            }
+          }
+        }
+      }
+
+      /* ──────────────────────────────── */
+      /* 🔹 Cambio de nickname            */
+      /* ──────────────────────────────── */
       const oldNick = oldMember.nickname || oldMember.user.globalName || oldMember.user.username;
       const newNick = newMember.nickname || newMember.user.globalName || newMember.user.username;
 
@@ -40,7 +72,9 @@ module.exports = {
         });
       }
 
-      // ---- Cambio de roles ----
+      /* ──────────────────────────────── */
+      /* 🔹 Cambio de roles               */
+      /* ──────────────────────────────── */
       const oldRoles = oldMember.roles.cache;
       const newRoles = newMember.roles.cache;
 
@@ -73,7 +107,9 @@ module.exports = {
         });
       }
 
-      // ---- Timeouts (communicationDisabledUntil) ----
+      /* ──────────────────────────────── */
+      /* 🔹 Timeouts (communicationDisabledUntil) */
+      /* ──────────────────────────────── */
       const oldTimeoutTs = oldMember.communicationDisabledUntilTimestamp;
       const newTimeoutTs = newMember.communicationDisabledUntilTimestamp;
 
@@ -119,7 +155,7 @@ module.exports = {
             description
           });
         } else if (oldTimeoutTs && newTimeoutTs) {
-          // Timeout modificado (cambio de fecha)
+          // Timeout modificado
           const oldUntil = Math.floor(oldTimeoutTs / 1000);
           const newUntil = Math.floor(newTimeoutTs / 1000);
 

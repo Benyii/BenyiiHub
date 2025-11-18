@@ -446,6 +446,54 @@ async function getStreamAnnounceChannel(guildId) {
   }
 }
 
+// ================== Welcome / Boost config ==================
+
+async function setWelcomeChannel(guildId, channelId, enabled) {
+  try {
+    await pool.execute(
+      `UPDATE guilds
+       SET welcome_channel_id = ?, welcome_enabled = ?
+       WHERE id = ?`,
+      [channelId, enabled ? 1 : 0, guildId]
+    );
+  } catch (err) {
+    logger.error('Error en setWelcomeChannel:', err);
+    throw err;
+  }
+}
+
+async function setBoostChannel(guildId, channelId, enabled) {
+  try {
+    await pool.execute(
+      `UPDATE guilds
+       SET boost_channel_id = ?, boost_enabled = ?
+       WHERE id = ?`,
+      [channelId, enabled ? 1 : 0, guildId]
+    );
+  } catch (err) {
+    logger.error('Error en setBoostChannel:', err);
+    throw err;
+  }
+}
+
+async function getWelcomeBoostSettings(guildId) {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT welcome_channel_id,
+              welcome_enabled,
+              boost_channel_id,
+              boost_enabled
+       FROM guilds
+       WHERE id = ?`,
+      [guildId]
+    );
+    return rows[0] || null;
+  } catch (err) {
+    logger.error('Error en getWelcomeBoostSettings:', err);
+    return null;
+  }
+}
+
 
 module.exports = {
   syncGuilds,
@@ -468,5 +516,8 @@ module.exports = {
   getNewsPingRole,
   getStreamsPingRole,
   setStreamAnnounceChannel,
-  getStreamAnnounceChannel
+  getStreamAnnounceChannel,
+  setWelcomeChannel,
+  setBoostChannel,
+  getWelcomeBoostSettings
 };
