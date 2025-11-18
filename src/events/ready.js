@@ -45,7 +45,7 @@ module.exports = {
     // 1) Sincronizar guilds con la DB
     await syncGuilds(client);
 
-    // 2) Avisar a guilds que no tienen canal de logs configurado
+    // 2) Avisar a guilds que no tienen canal de logs configurado (mensaje normal, no embed)
     const guildsWithoutLogs = await getGuildsWithoutLogChannel();
 
     for (const guildId of guildsWithoutLogs) {
@@ -78,13 +78,15 @@ module.exports = {
       description: 'Bot iniciado y operativo'
     });
 
-    // 4) Avisar en los canales de logs que el bot está operativo
+    // 4) Avisar en los canales de logs que el bot está operativo (embed verde)
     const nowTs = Math.floor(Date.now() / 1000);
 
-    await sendLogToAllGuilds(
-      client,
-      `✅ El bot se ha iniciado y está **operativo**.\n` +
-      `Hora de inicio: <t:${nowTs}:F> (<t:${nowTs}:R>)`
-    );
+    await sendLogToAllGuilds(client, {
+      level: 'success',
+      title: 'Bot iniciado',
+      description:
+        `✅ El bot se ha iniciado y está **operativo**.\n` +
+        `Hora de inicio: <t:${nowTs}:F> (<t:${nowTs}:R>)`
+    });
   }
 };

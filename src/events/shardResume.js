@@ -18,12 +18,14 @@ module.exports = {
       description: `Shard reanudado. Eventos re-jugados: ${replayedEvents}`
     });
 
-    // 2) Enviar a canales de logs
-    await sendLogToAllGuilds(
-      client,
-      `✅ El bot ha **recuperado la conexión** con Discord (shard **${shardId}**).\n` +
-      `Eventos re-jugados: \`${replayedEvents}\`\n` +
-      `Hora: <t:${nowTs}:F> (<t:${nowTs}:R>)`
-    );
+    // 2) Enviar a canales de logs (embed verde: success)
+    await sendLogToAllGuilds(client, {
+      level: 'success',
+      title: 'Reconexión del bot',
+      description:
+        `✅ El bot ha **recuperado la conexión** con Discord (shard **${shardId}**).\n` +
+        `Eventos re-jugados: \`${replayedEvents}\`\n` +
+        `Hora: <t:${nowTs}:F> (<t:${nowTs}:R>)`
+    });
   }
 };

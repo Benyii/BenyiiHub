@@ -1,15 +1,20 @@
 // src/services/logChannelService.js
 const { getAllGuildLogChannels } = require('./guildService');
+const { buildLogEmbed } = require('../utils/embedLogger');
 const logger = require('../config/logger');
 
 /**
- * Envía un mensaje a TODOS los canales de logs configurados.
+ * Envía un log embed a TODOS los canales de logs configurados.
  *
  * @param {import('discord.js').Client} client
- * @param {string} message
+ * @param {Object} options
+ * @param {'info'|'warning'|'error'|'success'} options.level
+ * @param {string} options.title
+ * @param {string} options.description
  */
-async function sendLogToAllGuilds(client, message) {
+async function sendLogToAllGuilds(client, { level, title, description }) {
   const guildLogRows = await getAllGuildLogChannels();
+  const embed = buildLogEmbed(client, { level, title, description });
 
   for (const row of guildLogRows) {
     const guild = client.guilds.cache.get(row.id);
@@ -22,7 +27,7 @@ async function sendLogToAllGuilds(client, message) {
     }
 
     try {
-      await channel.send(message);
+      await channel.send({ embeds: [embed] });
     } catch (err) {
       logger.error(`Error enviando log al canal ${row.log_channel_id} del guild ${row.id}:`, err);
     }
@@ -30,13 +35,16 @@ async function sendLogToAllGuilds(client, message) {
 }
 
 /**
- * Envía un mensaje solo al canal de logs de un guild específico.
+ * Envía un log embed solo al canal de logs de un guild específico.
  *
  * @param {import('discord.js').Client} client
  * @param {string} guildId
- * @param {string} message
+ * @param {Object} options
+ * @param {'info'|'warning'|'error'|'success'} options.level
+ * @param {string} options.title
+ * @param {string} options.description
  */
-async function sendLogToGuild(client, guildId, message) {
+async function sendLogToGuild(client, guildId, { level, title, description }) {
   const guild = client.guilds.cache.get(guildId);
   if (!guild) return;
 
@@ -45,10 +53,15 @@ async function sendLogToGuild(client, guildId, message) {
   if (!row) return;
 
   const channel = guild.channels.cache.get(row.log_channel_id);
-  if (!channel) return;
+  if (!channel) {
+    logger.warn(`Canal de logs ${row.log_channel_id} no encontrado en guild ${guildId}`);
+    return;
+  }
+
+  const embed = buildLogEmbed(client, { level, title, description });
 
   try {
-    await channel.send(message);
+    await channel.send({ embeds: [embed] });
   } catch (err) {
     logger.error(`Error enviando log al guild ${guildId}:`, err);
   }

@@ -18,12 +18,14 @@ module.exports = {
       description: 'Shard desconectado del gateway de Discord'
     });
 
-    // 2) Enviar a canales de logs
-    await sendLogToAllGuilds(
-      client,
-      `⚠️ El bot ha perdido la conexión con Discord (shard **${shardId}**).\n` +
-      `Código: \`${event.code}\`\n` +
-      `Hora del evento: <t:${nowTs}:F> (<t:${nowTs}:R>)`
-    );
+    // 2) Enviar a canales de logs (embed amarillo: warning)
+    await sendLogToAllGuilds(client, {
+      level: 'warning',
+      title: 'Desconexión del bot',
+      description:
+        `⚠️ El bot ha perdido la conexión con Discord (shard **${shardId}**).\n` +
+        `Código: \`${event.code}\`\n` +
+        `Hora del evento: <t:${nowTs}:F> (<t:${nowTs}:R>)`
+    });
   }
 };
