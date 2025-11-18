@@ -9,6 +9,7 @@
     "deploy-commands": "node src/deploy-commands.js"
   },
   "dependencies": {
+    "axios": "^1.13.2",
     "discord.js": "^14.16.0",
     "dotenv": "^16.4.0",
     "mysql2": "^3.11.0"
