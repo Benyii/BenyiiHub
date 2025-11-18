@@ -1,6 +1,8 @@
+// src/events/guildMemberAdd.js
 const { sendAdminEventLog } = require('../services/adminEventLogService');
 const { getWelcomeBoostSettings } = require('../services/guildService');
 const { generateWelcomeImage } = require('../services/welcomeImageService');
+const { applyWelcomeTemplate } = require('../utils/welcomeTemplate');
 const logger = require('../config/logger');
 
 module.exports = {
@@ -31,7 +33,7 @@ module.exports = {
         description
       });
 
-      // Bienvenida visual
+      // Config welcome / boost
       const settings = await getWelcomeBoostSettings(guildId);
 
       if (
@@ -47,15 +49,16 @@ module.exports = {
 
       const shortName = settings.short_guild_name || guild.name;
 
-      // Mensaje custom
+      // Plantilla de mensaje (custom o fallback)
       const template =
         settings.welcome_custom_message ||
-        '🎉 {mention}, ¡bienvenido/a al servidor {server}!';
+        '🎉 {mention}, ¡bienvenido/a al servidor {server}! Actualmente somos {membercount} miembros.';
 
-      const content = template
-        .replace(/\{user\}/gi, user.username)
-        .replace(/\{mention\}/gi, `${member}`)
-        .replace(/\{server\}/gi, shortName);
+      const content = applyWelcomeTemplate(template, {
+        member,
+        guild,
+        shortName
+      });
 
       const attachment = await generateWelcomeImage(member, shortName);
 

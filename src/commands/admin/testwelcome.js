@@ -15,6 +15,7 @@ const {
   generateBoostImage
 } = require('../../services/welcomeImageService');
 
+const { applyWelcomeTemplate } = require('../../utils/welcomeTemplate');
 const logger = require('../../config/logger');
 
 module.exports = {
@@ -53,14 +54,16 @@ module.exports = {
         return interaction.editReply('❌ No encontré ese usuario en este servidor.');
       }
 
-      // Obtener configuración del servidor
-      const settings = await getWelcomeBoostSettings(interaction.guild.id);
+      const guild = interaction.guild;
+
+      // Config
+      const settings = await getWelcomeBoostSettings(guild.id);
 
       if (!settings) {
-        return interaction.editReply('❌ El servidor no tiene configuración de bienvenida o boost.');
+        return interaction.editReply('❌ El servidor no tiene configuración de bienvenida/boost.');
       }
 
-      // Canal correspondiente
+      // Canal según tipo
       let channelId = null;
       if (tipo === 'welcome') channelId = settings.welcome_channel_id;
       if (tipo === 'boost') channelId = settings.boost_channel_id;
@@ -69,40 +72,38 @@ module.exports = {
         return interaction.editReply(`❌ No hay un canal configurado para **${tipo}**.`);
       }
 
-      const channel = interaction.guild.channels.cache.get(channelId);
+      const channel = guild.channels.cache.get(channelId);
       if (!channel || !channel.isTextBased()) {
         return interaction.editReply('❌ El canal configurado no es válido.');
       }
 
-      // Determinar nombre corto
-      const shortName =
-        settings.short_guild_name ||
-        interaction.guild.name;
+      const shortName = settings.short_guild_name || guild.name;
 
-      // Determinar mensaje custom
-      let template = settings.welcome_custom_message;
-      if (!template || tipo === 'boost') {
-        // Para boost usamos fallback diferente
-        template = tipo === 'welcome'
-          ? '🎉 {mention}, ¡bienvenido/a al servidor {server}!'
-          : '💜 {mention} ha boosteado el servidor {server}!';
+      // Plantilla según tipo
+      let template;
+      if (tipo === 'welcome') {
+        template =
+          settings.welcome_custom_message ||
+          '🎉 {mention}, ¡bienvenido/a al servidor {server}! Actualmente somos {membercount} miembros.';
+      } else {
+        // boost
+        template = '💜 {mention} ha boosteado el servidor {server}! Ahora somos {membercount} miembros.';
       }
 
-      const content = template
-        .replace(/\{user\}/gi, user.username)
-        .replace(/\{mention\}/gi, `${member}`)
-        .replace(/\{server\}/gi, shortName);
+      const content = applyWelcomeTemplate(template, {
+        member,
+        guild,
+        shortName
+      });
 
       // Generar imagen
       let attachment = null;
-
       if (tipo === 'welcome') {
         attachment = await generateWelcomeImage(member, shortName);
       } else {
         attachment = await generateBoostImage(member);
       }
 
-      // Enviar al canal configurado
       if (attachment) {
         await channel.send({
           content,
@@ -113,7 +114,6 @@ module.exports = {
       }
 
       await interaction.editReply('✅ Test enviado correctamente.');
-
     } catch (err) {
       logger.error('Error en /testwelcome:', err);
       await interaction.editReply('❌ Error ejecutando el comando de test.');

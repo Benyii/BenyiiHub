@@ -1,72 +1,94 @@
 // src/events/messageDelete.js
-const { sendUserEventLog } = require('../services/userEventLogService');
+
+const { AuditLogEvent, getExecutorLine } = require('../utils/auditLogHelper');
 const { getUserLogFlags } = require('../services/guildService');
+const { sendUserEventLog } = require('../services/userEventLogService');
 const logger = require('../config/logger');
-
-function getAttachmentSummaryAndImage(attachmentsCollection) {
-  const attachments = Array.from(attachmentsCollection.values());
-  if (!attachments.length) return { attachmentsText: '', imageUrl: null };
-
-  let attachmentsText = '📎 **Adjuntos:**\n';
-  let imageUrl = null;
-
-  attachments.forEach((att, idx) => {
-    const name = att.name || `archivo-${idx + 1}`;
-    const url = att.url || '';
-    attachmentsText += `${idx + 1}. [${name}](${url})\n`;
-  });
-
-  const imageAtt = attachments.find(att => {
-    const ct = att.contentType || '';
-    const name = att.name || '';
-    return (ct.startsWith('image/')) || /\.(png|jpe?g|gif|webp)$/i.test(name);
-  });
-
-  if (imageAtt) {
-    imageUrl = imageAtt.url || null;
-  }
-
-  return { attachmentsText, imageUrl };
-}
 
 module.exports = {
   name: 'messageDelete',
   async execute(message, client) {
     try {
+      // Ignorar DMs
       if (!message.guild) return;
-      if (message.author?.bot) return;
 
-      const guildId = message.guild.id;
+      const guild = message.guild;
+      const guildId = guild.id;
 
-      // 👇 revisar config
+      // Respetar flags de configuración de logs de usuario
       const flags = await getUserLogFlags(guildId);
-      if (!flags.messageDelete) return;
-
-      const author = message.author;
-
-      const content = message.content && message.content.trim().length
-        ? message.content
-        : '(sin contenido de texto o no disponible)';
-
-      const { attachmentsText, imageUrl } = getAttachmentSummaryAndImage(message.attachments);
-
-      let description =
-        `🗑️ **Mensaje borrado**\n` +
-        `Autor: ${author.tag} (${author.id})\n` +
-        `Canal: <#${message.channel.id}> (${message.channel.id})\n` +
-        `ID del mensaje: \`${message.id}\`\n` +
-        `Creado: <t:${Math.floor(message.createdTimestamp / 1000)}:F>\n\n` +
-        `**Contenido:**\n` +
-        '```' + (content.length > 1900 ? content.slice(0, 1897) + '...' : content) + '```';
-
-      if (attachmentsText) {
-        description += `\n${attachmentsText}`;
+      if (!flags || !flags.user_log_message_delete) {
+        return;
       }
 
+      // Manejar partials: intentar completar el mensaje
+      if (message.partial) {
+        try {
+          message = await message.fetch();
+        } catch (err) {
+          logger.warn('No se pudo hacer fetch del mensaje parcial borrado:', err);
+        }
+      }
+
+      const channel = message.channel;
+      const author = message.author || null;
+      const nowTs = Math.floor(Date.now() / 1000);
+
+      // Info básica de usuario
+      const userLabel = author
+        ? `${author.tag} (${author.id})`
+        : 'Usuario desconocido (no disponible / mensaje parcial)';
+
+      // Contenido del mensaje
+      let contentText = '(sin contenido de texto)';
+      if (message.content && message.content.trim().length > 0) {
+        contentText = message.content;
+      }
+
+      // Adjuntos
+      let attachmentsText = 'Sin adjuntos.';
+      if (message.attachments && message.attachments.size > 0) {
+        attachmentsText =
+          message.attachments
+            .map(att => `• ${att.name} — ${att.url}`)
+            .join('\n');
+      }
+
+      // Línea de ejecutor desde audit logs (si está disponible)
+      let executorLine = '';
+      try {
+        if (author) {
+          executorLine = await getExecutorLine(
+            guild,
+            AuditLogEvent.MessageDelete,
+            author.id
+          );
+        } else {
+          executorLine = await getExecutorLine(
+            guild,
+            AuditLogEvent.MessageDelete,
+            null
+          );
+        }
+      } catch (err) {
+        logger.warn('No se pudo obtener executorLine para messageDelete:', err);
+      }
+
+      const description =
+        `🗑️ **Mensaje borrado**\n` +
+        `Usuario: ${userLabel}\n` +
+        `Canal: ${channel ? `${channel} (${channel.id})` : '(desconocido)'}\n` +
+        (executorLine ? `${executorLine}\n` : '') +
+        `Hora: <t:${nowTs}:F>\n\n` +
+        `**Contenido:**\n` +
+        (contentText ? `\`\`\`\n${contentText}\n\`\`\`\n` : '*(sin contenido)*\n') +
+        `**Adjuntos:**\n${attachmentsText}`;
+
       await sendUserEventLog(client, guildId, {
-        title: 'Mensaje borrado',
-        description,
-        imageUrl
+        title: 'Mensaje eliminado',
+        description
+        // El servicio de userEventLogService se encarga de usar
+        // el embedLogger con color INFO.
       });
     } catch (err) {
       logger.error('Error en messageDelete event:', err);
