@@ -32,7 +32,7 @@ function findFirstWritableTextChannel(guild) {
 }
 
 module.exports = {
-  name: 'ready',
+  name: 'clientReady',
   once: true,
   async execute(client) {
     logger.info(`Bot iniciado como ${client.user.tag}`);
