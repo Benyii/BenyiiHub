@@ -524,6 +524,34 @@ async function setWelcomeCustomMessage(guildId, message) {
   }
 }
 
+// ============================================
+//              AUTO ROLES
+// ============================================
+
+async function addAutoRole(guildId, roleId) {
+  await pool.execute(
+    `INSERT INTO guild_autoroles (guild_id, role_id)
+     VALUES (?, ?)`,
+    [guildId, roleId]
+  );
+}
+
+async function removeAutoRole(guildId, roleId) {
+  await pool.execute(
+    `DELETE FROM guild_autoroles
+     WHERE guild_id = ? AND role_id = ?`,
+    [guildId, roleId]
+  );
+}
+
+async function getAutoRoles(guildId) {
+  const [rows] = await pool.execute(
+    `SELECT role_id FROM guild_autoroles WHERE guild_id = ?`,
+    [guildId]
+  );
+  return rows.map(r => r.role_id);
+}
+
 
 module.exports = {
   syncGuilds,
@@ -551,5 +579,9 @@ module.exports = {
   setBoostChannel,
   getWelcomeBoostSettings,
   setShortGuildName,
-  setWelcomeCustomMessage
+  setWelcomeCustomMessage,
+
+  addAutoRole,
+  removeAutoRole,
+  getAutoRoles
 };

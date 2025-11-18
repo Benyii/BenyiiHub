@@ -15,7 +15,7 @@ module.exports = {
       option
         .setName('mensaje')
         .setDescription(
-          'Mensaje de bienvenida. Soporta {user}, {mention}, {server} y menciones reales (<#canal>, <@&rol>, <@usuario>).'
+          'Mensaje de bienvenida. Soporta {user}, {mention}, {server}, <#canal>, <@&rol>, <@usuario>.'
         )
         .setRequired(true)
     ),

@@ -70,6 +70,23 @@ module.exports = {
       } else {
         await channel.send({ content });
       }
+
+      // ===========================================
+      //      ASIGNAR ROLES AUTOMÁTICOS
+      // ===========================================
+      try {
+        const roles = await getAutoRoles(guild.id);
+
+        for (const roleId of roles) {
+          const role = guild.roles.cache.get(roleId);
+
+          if (!role) continue;
+
+          await member.roles.add(role).catch(() => {});
+        }
+      } catch (err) {
+        logger.error('Error asignando roles automáticos:', err);
+      }
     } catch (err) {
       logger.error('Error en guildMemberAdd event:', err);
     }

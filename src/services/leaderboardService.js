@@ -1,8 +1,16 @@
+// src/services/leaderboardService.js
 const pool = require('../config/database');
 const logger = require('../config/logger');
 
+// Importamos funciones del nuevo statsService
+const {
+  recalculateXpAndLevel,
+  getLeaderboardStats
+} = require('./statsService');
+
 /**
  * Asegura el registro del usuario en la tabla user_stats y suma +1 mensaje.
+ * Luego recalcula XP y nivel.
  */
 async function incrementMessageCount(guildId, userId) {
   const sql = `
@@ -12,11 +20,18 @@ async function incrementMessageCount(guildId, userId) {
   `;
   try {
     await pool.execute(sql, [guildId, userId]);
+
+    // Recalcular XP y nivel con la nueva lógica
+    await recalculateXpAndLevel(guildId, userId);
   } catch (err) {
     logger.error('Error incrementMessageCount:', err);
   }
 }
 
+/**
+ * Registra el ingreso a voz y aumenta el contador de sesiones.
+ * Luego recalcula XP y nivel.
+ */
 async function registerVoiceJoin(guildId, userId) {
   const sql = `
     INSERT INTO user_stats (guild_id, user_id, messages_count, voice_seconds, voice_sessions, last_join_voice_at)
@@ -27,11 +42,18 @@ async function registerVoiceJoin(guildId, userId) {
   `;
   try {
     await pool.execute(sql, [guildId, userId]);
+
+    // Recalcular XP y nivel
+    await recalculateXpAndLevel(guildId, userId);
   } catch (err) {
     logger.error('Error registerVoiceJoin:', err);
   }
 }
 
+/**
+ * Registra la salida de voz, sumando los segundos a voice_seconds.
+ * Luego recalcula XP y nivel.
+ */
 async function registerVoiceLeave(guildId, userId) {
   const sql = `
     UPDATE user_stats
@@ -42,26 +64,22 @@ async function registerVoiceLeave(guildId, userId) {
   `;
   try {
     await pool.execute(sql, [guildId, userId]);
+
+    // Recalcular XP y nivel
+    await recalculateXpAndLevel(guildId, userId);
   } catch (err) {
     logger.error('Error registerVoiceLeave:', err);
   }
 }
 
+/**
+ * Devuelve el top de usuarios usando la lógica de statsService:
+ * - Incluye xp, lvl, joined_at y days_in_guild
+ * - Ordenado por xp DESC
+ */
 async function getTopUsers(guildId, limit = 10) {
-  const sql = `
-    SELECT
-      user_id,
-      messages_count,
-      voice_seconds,
-      voice_sessions,
-      (messages_count + voice_seconds / 60 + voice_sessions * 5) AS score
-    FROM user_stats
-    WHERE guild_id = ?
-    ORDER BY score DESC
-    LIMIT ?;
-  `;
   try {
-    const [rows] = await pool.execute(sql, [guildId, limit]);
+    const rows = await getLeaderboardStats(guildId, limit);
     return rows;
   } catch (err) {
     logger.error('Error getTopUsers:', err);
