@@ -7,8 +7,8 @@ const logger = require('../config/logger');
  */
 async function upsertGuild(guildId, name) {
   const sql = `
-    INSERT INTO guilds (id, name, log_channel_id)
-    VALUES (?, ?, NULL)
+    INSERT INTO guilds (id, name, log_channel_id, user_event_log_channel_id)
+    VALUES (?, ?, NULL, NULL)
     ON DUPLICATE KEY UPDATE
       name = VALUES(name),
       updated_at = CURRENT_TIMESTAMP;
@@ -58,13 +58,13 @@ async function getGuildsWithoutLogChannel() {
 }
 
 /**
- * Configura el canal de logs para un guild.
+ * Configura el canal de logs "principal" para un guild.
  */
 async function setLogChannel(guildId, channelId) {
   try {
     const sql = `
-      INSERT INTO guilds (id, name, log_channel_id)
-      VALUES (?, '', ?)
+      INSERT INTO guilds (id, name, log_channel_id, user_event_log_channel_id)
+      VALUES (?, '', ?, NULL)
       ON DUPLICATE KEY UPDATE
         log_channel_id = VALUES(log_channel_id),
         updated_at = CURRENT_TIMESTAMP;
@@ -78,7 +78,7 @@ async function setLogChannel(guildId, channelId) {
 }
 
 /**
- * Devuelve todos los guilds que tienen canal de logs configurado.
+ * Devuelve todos los guilds que tienen canal de logs principal configurado.
  * [{ id, log_channel_id }]
  */
 async function getAllGuildLogChannels() {
@@ -93,10 +93,50 @@ async function getAllGuildLogChannels() {
   }
 }
 
+/**
+ * Configura el canal de logs de eventos de usuario (mensajes/voz) para un guild.
+ */
+async function setUserEventLogChannel(guildId, channelId) {
+  try {
+    const sql = `
+      INSERT INTO guilds (id, name, log_channel_id, user_event_log_channel_id)
+      VALUES (?, '', NULL, ?)
+      ON DUPLICATE KEY UPDATE
+        user_event_log_channel_id = VALUES(user_event_log_channel_id),
+        updated_at = CURRENT_TIMESTAMP;
+    `;
+    await pool.execute(sql, [guildId, channelId]);
+    logger.info(`User event log channel configurado para guild ${guildId}: ${channelId}`);
+  } catch (err) {
+    logger.error('Error configurando user_event_log_channel:', err);
+    throw err;
+  }
+}
+
+/**
+ * Obtiene el canal de logs de eventos de usuario de un guild.
+ * Devuelve string o null.
+ */
+async function getUserEventLogChannel(guildId) {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT user_event_log_channel_id FROM guilds WHERE id = ?',
+      [guildId]
+    );
+    if (!rows.length) return null;
+    return rows[0].user_event_log_channel_id || null;
+  } catch (err) {
+    logger.error('Error obteniendo user_event_log_channel para guild ' + guildId, err);
+    return null;
+  }
+}
+
 module.exports = {
   syncGuilds,
   upsertGuild,
   getGuildsWithoutLogChannel,
   setLogChannel,
-  getAllGuildLogChannels
+  getAllGuildLogChannels,
+  setUserEventLogChannel,
+  getUserEventLogChannel
 };
