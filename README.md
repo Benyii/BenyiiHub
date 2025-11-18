@@ -33,12 +33,6 @@ Envia mensajes embebidos personalizados:
 - Manejo eficiente de conexiones
 - Tablas para guilds, estadísticas y canales dinámicos
 
-### 🔹 Listo para Docker
-Incluye:
-- Dockerfile
-- docker-compose.yml
-- Inicialización automática de MySQL con schema
-
 ---
 
 ## 📦 Tecnologías utilizadas
@@ -48,40 +42,6 @@ Incluye:
 - **MySQL 8**
 - **mysql2/promise**
 - **dotenv**
-- **Docker & docker-compose**
 - Arquitectura tipo **MVC por capas**
 
----
 
-## 📁 Estructura del proyecto
-
-```text
-discord-bot/
-├─ src/
-│  ├─ config/
-│  │  ├─ config.js
-│  │  ├─ database.js
-│  │  └─ logger.js
-│  ├─ commands/
-│  │  ├─ general/
-│  │  │  ├─ ping.js
-│  │  │  └─ top.js
-│  │  └─ admin/
-│  │     └─ embed.js
-│  ├─ events/
-│  │  ├─ ready.js
-│  │  ├─ interactionCreate.js
-│  │  ├─ messageCreate.js
-│  │  └─ voiceStateUpdate.js
-│  ├─ services/
-│  │  ├─ leaderboardService.js
-│  │  └─ voiceChannelService.js
-│  ├─ deploy-commands.js
-│  └─ index.js
-├─ sql/
-│  └─ schema.sql
-├─ .env
-├─ Dockerfile
-├─ docker-compose.yml
-├─ .gitignore
-└─ package.json
