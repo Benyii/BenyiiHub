@@ -5,6 +5,6 @@ module.exports = {
     .setName('ping')
     .setDescription('Responde con Pong!'),
   async execute(interaction) {
-    await interaction.reply({ content: '🏓 Pong!', ephemeral: true });
+    await interaction.reply({ content: '🏓 Pong!', flags: 64 });
   }
 };

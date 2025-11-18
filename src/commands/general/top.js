@@ -12,7 +12,7 @@ module.exports = {
     if (!topUsers.length) {
       return interaction.reply({
         content: 'No hay datos todavía para el leaderboard.',
-        ephemeral: true
+        flags: 64
       });
     }
 
