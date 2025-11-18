@@ -1,5 +1,6 @@
 // src/events/messageUpdate.js
 const { sendUserEventLog } = require('../services/userEventLogService');
+const { getUserLogFlags } = require('../services/guildService');
 const logger = require('../config/logger');
 
 function getAttachmentSummaryAndImage(attachmentsCollection) {
@@ -35,7 +36,6 @@ module.exports = {
       if (!newMessage.guild) return;
       if (newMessage.author?.bot) return;
 
-      // Manejo de partials
       try {
         if (oldMessage.partial) oldMessage = await oldMessage.fetch();
         if (newMessage.partial) newMessage = await newMessage.fetch();
@@ -44,6 +44,11 @@ module.exports = {
       }
 
       const guildId = newMessage.guild.id;
+
+      // 👇 revisar config
+      const flags = await getUserLogFlags(guildId);
+      if (!flags.messageEdit) return;
+
       const author = newMessage.author;
 
       const oldContent = oldMessage.content || '(sin contenido o no disponible)';
@@ -51,7 +56,6 @@ module.exports = {
 
       if (oldContent === newContent &&
           oldMessage.attachments?.size === newMessage.attachments?.size) {
-        // Si texto y número de adjuntos no cambian, probablemente no nos interesa loguear
         return;
       }
 

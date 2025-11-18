@@ -1,5 +1,6 @@
 // src/events/messageDelete.js
 const { sendUserEventLog } = require('../services/userEventLogService');
+const { getUserLogFlags } = require('../services/guildService');
 const logger = require('../config/logger');
 
 function getAttachmentSummaryAndImage(attachmentsCollection) {
@@ -15,7 +16,6 @@ function getAttachmentSummaryAndImage(attachmentsCollection) {
     attachmentsText += `${idx + 1}. [${name}](${url})\n`;
   });
 
-  // Detectar primera imagen
   const imageAtt = attachments.find(att => {
     const ct = att.contentType || '';
     const name = att.name || '';
@@ -33,11 +33,15 @@ module.exports = {
   name: 'messageDelete',
   async execute(message, client) {
     try {
-      // Ignorar DMs y mensajes del propio bot
       if (!message.guild) return;
       if (message.author?.bot) return;
 
       const guildId = message.guild.id;
+
+      // 👇 revisar config
+      const flags = await getUserLogFlags(guildId);
+      if (!flags.messageDelete) return;
+
       const author = message.author;
 
       const content = message.content && message.content.trim().length

@@ -7,8 +7,16 @@ const logger = require('../config/logger');
  */
 async function upsertGuild(guildId, name) {
   const sql = `
-    INSERT INTO guilds (id, name, log_channel_id, user_event_log_channel_id)
-    VALUES (?, ?, NULL, NULL)
+    INSERT INTO guilds (
+      id,
+      name,
+      log_channel_id,
+      user_event_log_channel_id,
+      log_user_message_delete,
+      log_user_message_edit,
+      log_user_voice
+    )
+    VALUES (?, ?, NULL, NULL, 1, 1, 1)
     ON DUPLICATE KEY UPDATE
       name = VALUES(name),
       updated_at = CURRENT_TIMESTAMP;
@@ -63,8 +71,16 @@ async function getGuildsWithoutLogChannel() {
 async function setLogChannel(guildId, channelId) {
   try {
     const sql = `
-      INSERT INTO guilds (id, name, log_channel_id, user_event_log_channel_id)
-      VALUES (?, '', ?, NULL)
+      INSERT INTO guilds (
+        id,
+        name,
+        log_channel_id,
+        user_event_log_channel_id,
+        log_user_message_delete,
+        log_user_message_edit,
+        log_user_voice
+      )
+      VALUES (?, '', ?, NULL, 1, 1, 1)
       ON DUPLICATE KEY UPDATE
         log_channel_id = VALUES(log_channel_id),
         updated_at = CURRENT_TIMESTAMP;
@@ -99,8 +115,16 @@ async function getAllGuildLogChannels() {
 async function setUserEventLogChannel(guildId, channelId) {
   try {
     const sql = `
-      INSERT INTO guilds (id, name, log_channel_id, user_event_log_channel_id)
-      VALUES (?, '', NULL, ?)
+      INSERT INTO guilds (
+        id,
+        name,
+        log_channel_id,
+        user_event_log_channel_id,
+        log_user_message_delete,
+        log_user_message_edit,
+        log_user_voice
+      )
+      VALUES (?, '', NULL, ?, 1, 1, 1)
       ON DUPLICATE KEY UPDATE
         user_event_log_channel_id = VALUES(user_event_log_channel_id),
         updated_at = CURRENT_TIMESTAMP;
@@ -131,6 +155,91 @@ async function getUserEventLogChannel(guildId) {
   }
 }
 
+/**
+ * Devuelve los flags de configuración de logs de usuario para un guild.
+ * Si no hay registro, devuelve todos en true.
+ */
+async function getUserLogFlags(guildId) {
+  try {
+    const [rows] = await pool.execute(
+      `
+      SELECT
+        log_user_message_delete,
+        log_user_message_edit,
+        log_user_voice
+      FROM guilds
+      WHERE id = ?
+      `,
+      [guildId]
+    );
+
+    if (!rows.length) {
+      return {
+        messageDelete: true,
+        messageEdit: true,
+        voice: true
+      };
+    }
+
+    const row = rows[0];
+    return {
+      messageDelete: !!row.log_user_message_delete,
+      messageEdit: !!row.log_user_message_edit,
+      voice: !!row.log_user_voice
+    };
+  } catch (err) {
+    logger.error('Error obteniendo flags de user logs para guild ' + guildId, err);
+    return {
+      messageDelete: true,
+      messageEdit: true,
+      voice: true
+    };
+  }
+}
+
+/**
+ * Establece un flag específico de logs de usuario para un guild.
+ * type: 'delete' | 'edit' | 'voice'
+ */
+async function setUserLogFlag(guildId, type, enabled) {
+  const value = enabled ? 1 : 0;
+
+  let column;
+  switch (type) {
+    case 'delete':
+      column = 'log_user_message_delete';
+      break;
+    case 'edit':
+      column = 'log_user_message_edit';
+      break;
+    case 'voice':
+      column = 'log_user_voice';
+      break;
+    default:
+      throw new Error(`Tipo de flag de logs de usuario no válido: ${type}`);
+  }
+
+  const sql = `
+    INSERT INTO guilds (
+      id,
+      name,
+      ${column}
+    )
+    VALUES (?, '', ?)
+    ON DUPLICATE KEY UPDATE
+      ${column} = VALUES(${column}),
+      updated_at = CURRENT_TIMESTAMP;
+  `;
+
+  try {
+    await pool.execute(sql, [guildId, value]);
+    logger.info(`Flag de user log "${type}" actualizado para guild ${guildId}: ${value}`);
+  } catch (err) {
+    logger.error(`Error actualizando flag "${type}" de user logs para guild ${guildId}:`, err);
+    throw err;
+  }
+}
+
 module.exports = {
   syncGuilds,
   upsertGuild,
@@ -138,5 +247,7 @@ module.exports = {
   setLogChannel,
   getAllGuildLogChannels,
   setUserEventLogChannel,
-  getUserEventLogChannel
+  getUserEventLogChannel,
+  getUserLogFlags,
+  setUserLogFlag
 };

@@ -2,6 +2,7 @@
 const leaderboardService = require('../services/leaderboardService');
 const voiceChannelService = require('../services/voiceChannelService');
 const { sendUserEventLog } = require('../services/userEventLogService');
+const { getUserLogFlags } = require('../services/guildService');
 const logger = require('../config/logger');
 
 module.exports = {
@@ -36,8 +37,11 @@ module.exports = {
       logger.error('Error en voiceChannelService dentro de voiceStateUpdate:', err);
     }
 
-    // Logs de eventos de usuario (voz) – siempre INFO/azul
+    // Logs de eventos de usuario (voz) – respetando config
     try {
+      const flags = await getUserLogFlags(guildId);
+      if (!flags.voice) return;
+
       if (joinedVoice && newState.channel) {
         const ch = newState.channel;
         const userTag = member?.user?.tag || userId;
