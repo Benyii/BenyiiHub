@@ -4,6 +4,7 @@ const logger = require('../config/logger');
 
 /**
  * Inserta o actualiza un guild en la tabla `guilds`.
+ * Asegura que existan columnas base y flags con defaults.
  */
 async function upsertGuild(guildId, name) {
   const sql = `
@@ -12,11 +13,13 @@ async function upsertGuild(guildId, name) {
       name,
       log_channel_id,
       user_event_log_channel_id,
+      admin_event_log_channel_id,
       log_user_message_delete,
       log_user_message_edit,
-      log_user_voice
+      log_user_voice,
+      log_admin_events
     )
-    VALUES (?, ?, NULL, NULL, 1, 1, 1)
+    VALUES (?, ?, NULL, NULL, NULL, 1, 1, 1, 1)
     ON DUPLICATE KEY UPDATE
       name = VALUES(name),
       updated_at = CURRENT_TIMESTAMP;
@@ -74,13 +77,9 @@ async function setLogChannel(guildId, channelId) {
       INSERT INTO guilds (
         id,
         name,
-        log_channel_id,
-        user_event_log_channel_id,
-        log_user_message_delete,
-        log_user_message_edit,
-        log_user_voice
+        log_channel_id
       )
-      VALUES (?, '', ?, NULL, 1, 1, 1)
+      VALUES (?, '', ?)
       ON DUPLICATE KEY UPDATE
         log_channel_id = VALUES(log_channel_id),
         updated_at = CURRENT_TIMESTAMP;
@@ -110,6 +109,27 @@ async function getAllGuildLogChannels() {
 }
 
 /**
+ * Devuelve el canal de logs principal de un guild (log_channel_id) o null.
+ */
+async function getGuildLogChannel(guildId) {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT log_channel_id FROM guilds WHERE id = ?',
+      [guildId]
+    );
+    if (!rows.length) return null;
+    return rows[0].log_channel_id || null;
+  } catch (err) {
+    logger.error('Error obteniendo log_channel_id para guild ' + guildId, err);
+    return null;
+  }
+}
+
+/* ──────────────────────────────── */
+/* USER EVENT LOGS (mensajes/voz)  */
+/* ──────────────────────────────── */
+
+/**
  * Configura el canal de logs de eventos de usuario (mensajes/voz) para un guild.
  */
 async function setUserEventLogChannel(guildId, channelId) {
@@ -118,13 +138,9 @@ async function setUserEventLogChannel(guildId, channelId) {
       INSERT INTO guilds (
         id,
         name,
-        log_channel_id,
-        user_event_log_channel_id,
-        log_user_message_delete,
-        log_user_message_edit,
-        log_user_voice
+        user_event_log_channel_id
       )
-      VALUES (?, '', NULL, ?, 1, 1, 1)
+      VALUES (?, '', ?)
       ON DUPLICATE KEY UPDATE
         user_event_log_channel_id = VALUES(user_event_log_channel_id),
         updated_at = CURRENT_TIMESTAMP;
@@ -132,7 +148,7 @@ async function setUserEventLogChannel(guildId, channelId) {
     await pool.execute(sql, [guildId, channelId]);
     logger.info(`User event log channel configurado para guild ${guildId}: ${channelId}`);
   } catch (err) {
-    logger.error('Error configurando user_event_log_channel:', err);
+    logger.error('Error configurando user_event_log_channel_id:', err);
     throw err;
   }
 }
@@ -150,7 +166,7 @@ async function getUserEventLogChannel(guildId) {
     if (!rows.length) return null;
     return rows[0].user_event_log_channel_id || null;
   } catch (err) {
-    logger.error('Error obteniendo user_event_log_channel para guild ' + guildId, err);
+    logger.error('Error obteniendo user_event_log_channel_id para guild ' + guildId, err);
     return null;
   }
 }
@@ -158,6 +174,12 @@ async function getUserEventLogChannel(guildId) {
 /**
  * Devuelve los flags de configuración de logs de usuario para un guild.
  * Si no hay registro, devuelve todos en true.
+ *
+ * {
+ *   messageDelete: boolean,
+ *   messageEdit: boolean,
+ *   voice: boolean
+ * }
  */
 async function getUserLogFlags(guildId) {
   try {
@@ -240,14 +262,107 @@ async function setUserLogFlag(guildId, type, enabled) {
   }
 }
 
+/* ──────────────────────────────── */
+/* ADMIN EVENT LOGS                */
+/* ──────────────────────────────── */
+
+/**
+ * Configura el canal de logs administrativos para un guild.
+ */
+async function setAdminEventLogChannel(guildId, channelId) {
+  try {
+    const sql = `
+      INSERT INTO guilds (
+        id,
+        name,
+        admin_event_log_channel_id
+      )
+      VALUES (?, '', ?)
+      ON DUPLICATE KEY UPDATE
+        admin_event_log_channel_id = VALUES(admin_event_log_channel_id),
+        updated_at = CURRENT_TIMESTAMP;
+    `;
+    await pool.execute(sql, [guildId, channelId]);
+    logger.info(`Admin event log channel configurado para guild ${guildId}: ${channelId}`);
+  } catch (err) {
+    logger.error('Error configurando admin_event_log_channel_id:', err);
+    throw err;
+  }
+}
+
+/**
+ * Obtiene el canal de logs administrativos de un guild.
+ * Devuelve string o null.
+ */
+async function getAdminEventLogChannel(guildId) {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT admin_event_log_channel_id FROM guilds WHERE id = ?',
+      [guildId]
+    );
+    if (!rows.length) return null;
+    return rows[0].admin_event_log_channel_id || null;
+  } catch (err) {
+    logger.error('Error obteniendo admin_event_log_channel_id para guild ' + guildId, err);
+    return null;
+  }
+}
+
+/**
+ * Devuelve si los logs admin están activos.
+ */
+async function getAdminLogFlag(guildId) {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT log_admin_events FROM guilds WHERE id = ?',
+      [guildId]
+    );
+    if (!rows.length) return true;
+    return !!rows[0].log_admin_events;
+  } catch (err) {
+    logger.error('Error obteniendo flag de admin logs para guild ' + guildId, err);
+    return true;
+  }
+}
+
+/**
+ * Activa / desactiva logs admin para un guild.
+ */
+async function setAdminLogFlag(guildId, enabled) {
+  const value = enabled ? 1 : 0;
+
+  const sql = `
+    INSERT INTO guilds (id, name, log_admin_events)
+    VALUES (?, '', ?)
+    ON DUPLICATE KEY UPDATE
+      log_admin_events = VALUES(log_admin_events),
+      updated_at = CURRENT_TIMESTAMP;
+  `;
+
+  try {
+    await pool.execute(sql, [guildId, value]);
+    logger.info(`Flag de admin logs actualizado para guild ${guildId}: ${value}`);
+  } catch (err) {
+    logger.error(`Error actualizando flag de admin logs para guild ${guildId}:`, err);
+    throw err;
+  }
+}
+
 module.exports = {
   syncGuilds,
   upsertGuild,
   getGuildsWithoutLogChannel,
   setLogChannel,
   getAllGuildLogChannels,
+  getGuildLogChannel,
+
   setUserEventLogChannel,
   getUserEventLogChannel,
   getUserLogFlags,
-  setUserLogFlag
+  setUserLogFlag,
+
+  setAdminEventLogChannel,
+  getAdminEventLogChannel,
+  getAdminLogFlag,
+  setAdminLogFlag
 };
