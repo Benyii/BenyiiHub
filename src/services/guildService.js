@@ -77,9 +77,26 @@ async function setLogChannel(guildId, channelId) {
   }
 }
 
+/**
+ * Devuelve todos los guilds que tienen canal de logs configurado.
+ * [{ id, log_channel_id }]
+ */
+async function getAllGuildLogChannels() {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT id, log_channel_id FROM guilds WHERE log_channel_id IS NOT NULL'
+    );
+    return rows;
+  } catch (err) {
+    logger.error('Error obteniendo canales de logs:', err);
+    return [];
+  }
+}
+
 module.exports = {
   syncGuilds,
   upsertGuild,
   getGuildsWithoutLogChannel,
-  setLogChannel
+  setLogChannel,
+  getAllGuildLogChannels
 };

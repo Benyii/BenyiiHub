@@ -4,7 +4,12 @@ const {
   PermissionsBitField
 } = require('discord.js');
 const logger = require('../config/logger');
-const { syncGuilds, getGuildsWithoutLogChannel } = require('../services/guildService');
+const {
+  syncGuilds,
+  getGuildsWithoutLogChannel
+} = require('../services/guildService');
+const { sendLogToAllGuilds } = require('../services/logChannelService');
+const { logStatusForAllGuilds } = require('../services/statusLogService');
 
 /**
  * Devuelve el primer canal de texto donde el bot pueda enviar mensajes.
@@ -13,7 +18,6 @@ function findFirstWritableTextChannel(guild) {
   const me = guild.members.me;
   if (!me) return null;
 
-  // Ordenamos por posición para que normalmente elija un canal "alto"
   const textChannels = guild.channels.cache
     .filter(ch =>
       (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement)
@@ -41,7 +45,7 @@ module.exports = {
     // 1) Sincronizar guilds con la DB
     await syncGuilds(client);
 
-    // 2) Obtener guilds sin canal de logs configurado
+    // 2) Avisar a guilds que no tienen canal de logs configurado
     const guildsWithoutLogs = await getGuildsWithoutLogChannel();
 
     for (const guildId of guildsWithoutLogs) {
@@ -65,5 +69,22 @@ module.exports = {
         logger.error(`Error enviando mensaje de falta de log_channel en guild ${guild.id}:`, err);
       }
     }
+
+    // 3) Registrar en la DB que el bot se ha iniciado (por cada guild)
+    await logStatusForAllGuilds(client, {
+      eventType: 'STARTUP',
+      shardId: client.shard?.ids?.[0] ?? 0,
+      code: null,
+      description: 'Bot iniciado y operativo'
+    });
+
+    // 4) Avisar en los canales de logs que el bot está operativo
+    const nowTs = Math.floor(Date.now() / 1000);
+
+    await sendLogToAllGuilds(
+      client,
+      `✅ El bot se ha iniciado y está **operativo**.\n` +
+      `Hora de inicio: <t:${nowTs}:F> (<t:${nowTs}:R>)`
+    );
   }
 };
