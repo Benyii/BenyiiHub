@@ -580,6 +580,7 @@ module.exports = {
   getWelcomeBoostSettings,
   setShortGuildName,
   setWelcomeCustomMessage,
+  setStreamsPingRole,
 
   addAutoRole,
   removeAutoRole,
