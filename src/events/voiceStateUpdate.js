@@ -7,6 +7,14 @@ const { AuditLogEvent, getExecutorAndReason } = require('../utils/auditLogHelper
 const { getUserLogFlags } = require('../services/guildService');
 const logger = require('../config/logger');
 
+// servicio de canales dinámicos
+const {
+  getDynamicConfigByCreatorChannel,
+  getInstanceByChannel,
+  createDynamicInstance,
+  deleteInstanceByChannel
+} = require('../services/dynamicVoiceService');
+
 module.exports = {
   name: 'voiceStateUpdate',
   async execute(oldState, newState, client) {
@@ -16,17 +24,92 @@ module.exports = {
     const guildId = guild.id;
     const userId = oldState.id || newState.id;
     const member = newState.member || oldState.member;
+
     const userTag = member?.user ? `${member.user.tag} (${member.user.id})` : userId;
+    const displayName =
+      member?.displayName || member?.user?.username || userId;
+
     const nowTs = Math.floor(Date.now() / 1000);
 
-    const joinedVoice = !oldState.channelId && newState.channelId;
-    const leftVoice = oldState.channelId && !newState.channelId;
-    const movedVoice =
-      oldState.channelId &&
-      newState.channelId &&
-      oldState.channelId !== newState.channelId;
+    const oldChannelId = oldState.channelId;
+    const newChannelId = newState.channelId;
 
-    // -------- Leaderboard + canales dinámicos --------
+    const joinedVoice = !oldChannelId && newChannelId;
+    const leftVoice = oldChannelId && !newChannelId;
+    const movedVoice =
+      oldChannelId &&
+      newChannelId &&
+      oldChannelId !== newChannelId;
+
+    /* =======================================================
+     *  CANALES DE VOZ DINÁMICOS (sistema nuevo en DB)
+     * =====================================================*/
+
+    // 1) CREAR canal dinámico al entrar al canal "creador"
+    try {
+      if (newChannelId && newChannelId !== oldChannelId) {
+        const config = await getDynamicConfigByCreatorChannel(guildId, newChannelId);
+
+        if (config && config.creator_channel_id === newChannelId) {
+          const baseName = config.base_name || 'Sala';
+          const targetCategoryId =
+            config.target_category_id || config.source_category_id;
+
+          const targetCategory = guild.channels.cache.get(targetCategoryId);
+
+          if (!targetCategory) {
+            logger.warn(
+              `Categoria destino no encontrada para config #${config.id} en guild ${guild.id}`
+            );
+          } else {
+            const channelName = `${baseName} - ${displayName}`;
+            const userLimit = config.dynamic_user_limit || 0;
+
+            const createdChannel = await guild.channels.create({
+              name: channelName,
+              type: newState.channel?.type ?? 2, // 2 = voz
+              parent: targetCategory.id,
+              userLimit
+            });
+
+            // Registrar instancia en la tabla de instancias
+            await createDynamicInstance(guildId, config.id, createdChannel.id);
+
+            // Mover al usuario al canal nuevo
+            if (member?.voice) {
+              await member.voice.setChannel(createdChannel);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      logger.error('Error en sistema de canales dinámicos (creación):', err);
+    }
+
+    // 2) BORRAR canal dinámico cuando se queda vacío
+    try {
+      if (oldChannelId && oldChannelId !== newChannelId) {
+        const instance = await getInstanceByChannel(guildId, oldChannelId);
+        if (instance) {
+          const oldChannel = guild.channels.cache.get(oldChannelId);
+
+          // Si el canal ya no existe, limpiamos solo la DB
+          if (!oldChannel) {
+            await deleteInstanceByChannel(guildId, oldChannelId);
+          } else if (oldChannel.members.size === 0) {
+            // Canal dinámico sin usuarios -> eliminar
+            await oldChannel.delete('Canal dinámico vacío (auto-delete)');
+            await deleteInstanceByChannel(guildId, oldChannelId);
+          }
+        }
+      }
+    } catch (err) {
+      logger.error('Error en sistema de canales dinámicos (borrado):', err);
+    }
+
+    /* =======================================================
+     *  Leaderboard (tiempo en voz / sesiones)
+     * =====================================================*/
     if (guildId && userId) {
       try {
         if (joinedVoice) {
@@ -39,6 +122,9 @@ module.exports = {
       }
     }
 
+    /* =======================================================
+     *  Sistema antiguo de voiceChannelService (si lo sigues usando)
+     * =====================================================*/
     try {
       await voiceChannelService.createUserChannelIfNeeded(oldState, newState);
       await voiceChannelService.deleteUserChannelIfEmpty(oldState, newState);
@@ -46,7 +132,9 @@ module.exports = {
       logger.error('Error en voiceChannelService dentro de voiceStateUpdate:', err);
     }
 
-    // -------- Logs de usuario (nivel user logs) --------
+    /* =======================================================
+     *  Logs de usuario (nivel user logs)
+     * =====================================================*/
     try {
       const flags = await getUserLogFlags(guildId);
       if (flags.voice) {
@@ -97,7 +185,9 @@ module.exports = {
       logger.error('Error enviando userEventLog en voiceStateUpdate:', err);
     }
 
-    // -------- Logs administrativos (kick / move forzado) --------
+    /* =======================================================
+     *  Logs administrativos (kick / move forzado)
+     * =====================================================*/
     try {
       // Kick de voz (desconectado forzadamente)
       if (leftVoice && oldState.channel) {
