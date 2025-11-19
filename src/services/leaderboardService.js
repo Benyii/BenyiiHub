@@ -2,7 +2,6 @@
 const pool = require('../config/database');
 const logger = require('../config/logger');
 
-// Importamos funciones del nuevo statsService
 const {
   recalculateXpAndLevel,
   getLeaderboardStats
@@ -14,10 +13,22 @@ const {
  */
 async function incrementMessageCount(guildId, userId) {
   const sql = `
-    INSERT INTO user_stats (guild_id, user_id, messages_count, voice_seconds, voice_sessions, last_join_voice_at)
-    VALUES (?, ?, 1, 0, 0, NULL)
-    ON DUPLICATE KEY UPDATE messages_count = messages_count + 1;
+    INSERT INTO user_stats (
+      guild_id,
+      user_id,
+      messages_count,
+      voice_seconds,
+      voice_sessions,
+      last_join_voice_at,
+      joined_at,
+      xp,
+      lvl
+    )
+    VALUES (?, ?, 1, 0, 0, NULL, NULL, 0, 1)
+    ON DUPLICATE KEY UPDATE
+      messages_count = messages_count + 1;
   `;
+
   try {
     await pool.execute(sql, [guildId, userId]);
 
@@ -34,12 +45,23 @@ async function incrementMessageCount(guildId, userId) {
  */
 async function registerVoiceJoin(guildId, userId) {
   const sql = `
-    INSERT INTO user_stats (guild_id, user_id, messages_count, voice_seconds, voice_sessions, last_join_voice_at)
-    VALUES (?, ?, 0, 0, 1, NOW())
+    INSERT INTO user_stats (
+      guild_id,
+      user_id,
+      messages_count,
+      voice_seconds,
+      voice_sessions,
+      last_join_voice_at,
+      joined_at,
+      xp,
+      lvl
+    )
+    VALUES (?, ?, 0, 0, 1, NOW(), NULL, 0, 1)
     ON DUPLICATE KEY UPDATE
       voice_sessions = voice_sessions + 1,
       last_join_voice_at = NOW();
   `;
+
   try {
     await pool.execute(sql, [guildId, userId]);
 
@@ -62,6 +84,7 @@ async function registerVoiceLeave(guildId, userId) {
       last_join_voice_at = NULL
     WHERE guild_id = ? AND user_id = ? AND last_join_voice_at IS NOT NULL;
   `;
+
   try {
     await pool.execute(sql, [guildId, userId]);
 
