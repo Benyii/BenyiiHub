@@ -4,6 +4,12 @@ const logger = require('../config/logger');
 const { sendErrorLogToGuild } = require('../services/logChannelService');
 const { handleRolePanelButton } = require('../services/rolePanelService');
 
+// Parsear SUPERADMIN del .env una sola vez
+const superAdminIds = (process.env.SUPERADMIN || '')
+  .split(',')
+  .map(id => id.trim())
+  .filter(Boolean);
+
 module.exports = {
   name: 'interactionCreate',
   async execute(interaction, client) {
@@ -25,23 +31,62 @@ module.exports = {
       return;
     }
 
-    // Validación extra de admin para comandos en carpeta admin
+    // 🛡️ Validación de admin (incluye SUPERADMIN override)
     if (command.isAdmin) {
-      const member = interaction.member;
-      if (
-        !member ||
-        !member.permissions?.has(PermissionFlagsBits.Administrator)
-      ) {
-        try {
-          await interaction.reply({
-            content:
-              '❌ No tienes permisos para usar este comando de administración.',
-            flags: MessageFlags.Ephemeral
-          });
-        } catch (permErr) {
-          logger.error('Error respondiendo falta de permisos:', permErr);
+      const userId = interaction.user.id;
+
+      // Si hay SUPERADMIN definido, SOLO esos IDs pueden usar comandos admin
+      if (superAdminIds.length > 0) {
+        if (!superAdminIds.includes(userId)) {
+          try {
+            await interaction.reply({
+              content:
+                '❌ No tienes permisos para usar este comando de administración.',
+              flags: MessageFlags.Ephemeral
+            });
+          } catch (permErr) {
+            if (permErr.code !== 10062) {
+              logger.error('Error respondiendo falta de permisos (SUPERADMIN):', permErr);
+            }
+          }
+          return;
         }
-        return;
+      } else {
+        // Si NO hay SUPERADMIN, se usa el sistema anterior: solo Administrador
+        if (!interaction.guild) {
+          try {
+            await interaction.reply({
+              content:
+                '❌ Este comando de administración solo puede usarse dentro de un servidor.',
+              flags: MessageFlags.Ephemeral
+            });
+          } catch (permErr) {
+            if (permErr.code !== 10062) {
+              logger.error('Error respondiendo falta de permisos (sin guild):', permErr);
+            }
+          }
+          return;
+        }
+
+        const member = interaction.member;
+
+        if (
+          !member ||
+          !member.permissions?.has(PermissionFlagsBits.Administrator)
+        ) {
+          try {
+            await interaction.reply({
+              content:
+                '❌ No tienes permisos para usar este comando de administración.',
+              flags: MessageFlags.Ephemeral
+            });
+          } catch (permErr) {
+            if (permErr.code !== 10062) {
+              logger.error('Error respondiendo falta de permisos (permisos Discord):', permErr);
+            }
+          }
+          return;
+        }
       }
     }
 
