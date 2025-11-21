@@ -16,17 +16,19 @@ module.exports = {
     .setName('rolepanel_removebutton')
     .setDescription('Elimina un botón de un panel de roles.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addChannelOption(option =>
-      option
-        .setName('canal')
-        .setDescription('Canal donde está el panel de roles (por defecto, este canal).')
-        .setRequired(false)
-    )
+    // REQUIRED PRIMERO
     .addIntegerOption(option =>
       option
         .setName('button_id')
         .setDescription('ID del botón a eliminar (ver /rolepanel_listbuttons).')
         .setRequired(true)
+    )
+    // OPCIONAL DESPUÉS
+    .addChannelOption(option =>
+      option
+        .setName('canal')
+        .setDescription('Canal donde está el panel de roles (por defecto, este canal).')
+        .setRequired(false)
     ),
 
   isAdmin: true,

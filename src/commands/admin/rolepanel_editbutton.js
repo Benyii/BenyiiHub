@@ -16,18 +16,14 @@ module.exports = {
     .setName('rolepanel_editbutton')
     .setDescription('Edita un botón de un panel de roles.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addChannelOption(option =>
-      option
-        .setName('canal')
-        .setDescription('Canal donde está el panel de roles (por defecto, este canal).')
-        .setRequired(false)
-    )
+    // REQUIRED PRIMERO
     .addIntegerOption(option =>
       option
         .setName('button_id')
         .setDescription('ID del botón a editar (ver /rolepanel_listbuttons).')
         .setRequired(true)
     )
+    // OPCIONALES DESPUÉS
     .addStringOption(option =>
       option
         .setName('nuevo_texto')
@@ -50,6 +46,12 @@ module.exports = {
       option
         .setName('nuevo_emoji')
         .setDescription('Nuevo emoji del botón (unicode o <:custom:1234567890>).')
+        .setRequired(false)
+    )
+    .addChannelOption(option =>
+      option
+        .setName('canal')
+        .setDescription('Canal donde está el panel de roles (por defecto, este canal).')
         .setRequired(false)
     ),
 

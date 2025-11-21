@@ -15,12 +15,7 @@ module.exports = {
     .setName('rolepanel_addbutton')
     .setDescription('Agrega un botón a un panel de roles.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addChannelOption(option =>
-      option
-        .setName('canal')
-        .setDescription('Canal donde está el panel de roles (por defecto, este canal).')
-        .setRequired(false)
-    )
+    // ⚠️ TODOS LOS REQUIRED PRIMERO
     .addRoleOption(option =>
       option
         .setName('rol')
@@ -44,6 +39,13 @@ module.exports = {
           { name: 'Éxito (verde)', value: 'success' },
           { name: 'Peligro (rojo)', value: 'danger' }
         )
+    )
+    // 👇 OPCIONALES DESPUÉS
+    .addChannelOption(option =>
+      option
+        .setName('canal')
+        .setDescription('Canal donde está el panel (por defecto, este canal).')
+        .setRequired(false)
     )
     .addStringOption(option =>
       option
