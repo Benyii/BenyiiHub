@@ -5,6 +5,9 @@ const { sendUserEventLog } = require('../services/userEventLogService');
 const { sendAdminEventLog } = require('../services/adminEventLogService');
 const { AuditLogEvent, getExecutorAndReason } = require('../utils/auditLogHelper');
 const { getUserLogFlags } = require('../services/guildService');
+const {
+  isVoiceChannelBlacklisted
+} = require('../services/voiceBlacklistService');
 const logger = require('../config/logger');
 
 // servicio de canales dinámicos
@@ -108,14 +111,34 @@ module.exports = {
     }
 
     /* =======================================================
-     *  Leaderboard (tiempo en voz / sesiones)
+     *  Leaderboard (tiempo en voz / sesiones) con blacklist
      * =====================================================*/
     if (guildId && userId) {
       try {
-        if (joinedVoice) {
-          await leaderboardService.registerVoiceJoin(guildId, userId);
-        } else if (leftVoice) {
-          await leaderboardService.registerVoiceLeave(guildId, userId);
+        let skip = false;
+
+        // Si entra a voz, revisamos el canal nuevo
+        if (joinedVoice && newChannelId) {
+          const blacklisted = await isVoiceChannelBlacklisted(guildId, newChannelId);
+          if (blacklisted) {
+            skip = true;
+          }
+        }
+
+        // Si sale de voz, revisamos el canal de donde viene
+        if (leftVoice && oldChannelId && !skip) {
+          const blacklisted = await isVoiceChannelBlacklisted(guildId, oldChannelId);
+          if (blacklisted) {
+            skip = true;
+          }
+        }
+
+        if (!skip) {
+          if (joinedVoice) {
+            await leaderboardService.registerVoiceJoin(guildId, userId);
+          } else if (leftVoice) {
+            await leaderboardService.registerVoiceLeave(guildId, userId);
+          }
         }
       } catch (err) {
         logger.error('Error actualizando leaderboard en voiceStateUpdate:', err);
