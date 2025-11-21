@@ -4,60 +4,73 @@ const {
   MessageFlags
 } = require('discord.js');
 const logger = require('../../config/logger');
-const { upsertRolePanel, sendOrUpdateRolePanel } = require('../../services/rolePanelService');
+const {
+  createRolePanel,
+  sendOrUpdateRolePanel
+} = require('../../services/rolePanelService');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('rolepanel_setup')
-    .setDescription('Configura el panel de roles en un canal.')
+    .setDescription('Crea un nuevo panel de roles en un canal.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addChannelOption(option =>
-      option
-        .setName('canal')
-        .setDescription('Canal donde se enviará el panel.')
-        .setRequired(true)
-    )
+    // ⚠️ Opciones requeridas primero
     .addStringOption(option =>
       option
         .setName('titulo')
-        .setDescription('Título del panel (se mostrará junto al icono del servidor).')
+        .setDescription('Título del panel (línea superior).')
         .setRequired(true)
     )
     .addStringOption(option =>
       option
         .setName('descripcion')
-        .setDescription('Texto descriptivo que aparecerá debajo del título.')
+        .setDescription('Texto descriptivo del panel.')
+        .setRequired(true)
+    )
+    // Opcionales después
+    .addChannelOption(option =>
+      option
+        .setName('canal')
+        .setDescription('Canal donde se creará el panel (por defecto, este canal).')
         .setRequired(false)
     ),
 
   isAdmin: true,
 
-  async execute(interaction, client) {
+  async execute(interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
-      const channel = interaction.options.getChannel('canal', true);
+      const guildId = interaction.guild.id;
       const titulo = interaction.options.getString('titulo', true);
-      const descripcion =
-        interaction.options.getString('descripcion') || '';
+      const descripcion = interaction.options.getString('descripcion', true);
+      const channelOption = interaction.options.getChannel('canal');
+      const targetChannel = channelOption || interaction.channel;
 
-      if (!channel.isTextBased()) {
+      if (!targetChannel.isTextBased()) {
         await interaction.editReply('❌ El canal debe ser un canal de texto.');
         return;
       }
 
-      const guildId = interaction.guild.id;
+      // Creamos un NUEVO panel independiente
+      const panel = await createRolePanel(
+        guildId,
+        targetChannel.id,
+        titulo,
+        descripcion
+      );
 
-      const panel = await upsertRolePanel(guildId, channel.id, titulo, descripcion);
-      await sendOrUpdateRolePanel(client, panel);
+      // Envía el mensaje del panel (embed + botones, si los hubiera)
+      await sendOrUpdateRolePanel(interaction.client, panel);
 
       await interaction.editReply(
-        `✅ Panel de roles configurado en ${channel} con título "**${titulo}**".`
+        `✅ Panel creado en ${targetChannel} con ID \`${panel.id}\`.\n` +
+        `Usa ese ID en \`/rolepanel_addbutton\`, \`/rolepanel_editbutton\`, etc.`
       );
     } catch (err) {
       logger.error('Error en /rolepanel_setup:', err);
       await interaction.editReply(
-        '❌ Ocurrió un error configurando el panel de roles.'
+        '❌ Ocurrió un error al crear el panel de roles.'
       );
     }
   }

@@ -5,7 +5,7 @@ const {
 } = require('discord.js');
 const logger = require('../../config/logger');
 const {
-  getRolePanelByGuildAndChannel,
+  getRolePanelById,
   addRolePanelButton,
   sendOrUpdateRolePanel
 } = require('../../services/rolePanelService');
@@ -15,7 +15,13 @@ module.exports = {
     .setName('rolepanel_addbutton')
     .setDescription('Agrega un botón a un panel de roles.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    // ⚠️ TODOS LOS REQUIRED PRIMERO
+    // REQUIRED primero
+    .addIntegerOption(option =>
+      option
+        .setName('panel_id')
+        .setDescription('ID del panel (ver /rolepanel_listpanels).')
+        .setRequired(true)
+    )
     .addRoleOption(option =>
       option
         .setName('rol')
@@ -40,13 +46,7 @@ module.exports = {
           { name: 'Peligro (rojo)', value: 'danger' }
         )
     )
-    // 👇 OPCIONALES DESPUÉS
-    .addChannelOption(option =>
-      option
-        .setName('canal')
-        .setDescription('Canal donde está el panel (por defecto, este canal).')
-        .setRequired(false)
-    )
+    // OPCIONALES después
     .addStringOption(option =>
       option
         .setName('emoji')
@@ -60,20 +60,12 @@ module.exports = {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
-      const guildId = interaction.guild.id;
-      const channelOption = interaction.options.getChannel('canal');
-      const targetChannel = channelOption || interaction.channel;
-
-      if (!targetChannel.isTextBased()) {
-        await interaction.editReply('❌ El canal debe ser un canal de texto.');
-        return;
-      }
-
-      const panel = await getRolePanelByGuildAndChannel(guildId, targetChannel.id);
+      const panelId = interaction.options.getInteger('panel_id', true);
+      const panel = await getRolePanelById(panelId);
 
       if (!panel) {
         await interaction.editReply(
-          '❌ No hay un panel de roles configurado para ese canal. Usa `/rolepanel_setup` primero.'
+          `❌ No encontré un panel con ID \`${panelId}\`.`
         );
         return;
       }
@@ -87,7 +79,8 @@ module.exports = {
       await sendOrUpdateRolePanel(interaction.client, panel);
 
       await interaction.editReply(
-        `✅ Botón agregado para el rol ${role} con texto "**${texto}**" en ${targetChannel}.`
+        `✅ Botón agregado para el rol ${role} con texto "**${texto}**" ` +
+        `en el panel ID \`${panel.id}\`.`
       );
     } catch (err) {
       logger.error('Error en /rolepanel_addbutton:', err);

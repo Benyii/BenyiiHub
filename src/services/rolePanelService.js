@@ -403,15 +403,103 @@ async function getRolePanelByGuildAndChannel(guildId, channelId) {
   }
 }
 
+// Al inicio del archivo ya tienes:
+// const pool = require('../config/database');
+// const logger = require('../config/logger');
+// y el resto...
+
+async function createRolePanel(guildId, channelId, panelTitle, panelBody) {
+  const sql = `
+    INSERT INTO role_panels (guild_id, channel_id, message_id, panel_title, panel_body)
+    VALUES (?, ?, NULL, ?, ?)
+  `;
+  try {
+    const [result] = await pool.execute(sql, [
+      guildId,
+      channelId,
+      panelTitle,
+      panelBody
+    ]);
+
+    const [rows] = await pool.execute(
+      'SELECT * FROM role_panels WHERE id = ?',
+      [result.insertId]
+    );
+
+    return rows[0] || null;
+  } catch (err) {
+    logger.error('Error en createRolePanel:', err);
+    throw err;
+  }
+}
+
+async function getRolePanelById(panelId) {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT * FROM role_panels WHERE id = ?',
+      [panelId]
+    );
+    return rows[0] || null;
+  } catch (err) {
+    logger.error('Error en getRolePanelById:', err);
+    return null;
+  }
+}
+
+async function listRolePanelsByChannel(guildId, channelId) {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT id, channel_id, panel_title, message_id
+       FROM role_panels
+       WHERE guild_id = ? AND channel_id = ?
+       ORDER BY id ASC`,
+      [guildId, channelId]
+    );
+    return rows;
+  } catch (err) {
+    logger.error('Error en listRolePanelsByChannel:', err);
+    return [];
+  }
+}
+
+async function deleteRolePanel(panelId) {
+  try {
+    // Primero obtenemos el panel para recuperar message_id y channel_id
+    const [rows] = await pool.execute(
+      'SELECT * FROM role_panels WHERE id = ?',
+      [panelId]
+    );
+
+    if (!rows.length) return null;
+
+    const panel = rows[0];
+
+    // Eliminamos el panel (los botones se eliminan por ON DELETE CASCADE)
+    await pool.execute(
+      'DELETE FROM role_panels WHERE id = ?',
+      [panelId]
+    );
+
+    return panel;
+  } catch (err) {
+    logger.error('Error en deleteRolePanel:', err);
+    throw err;
+  }
+}
+
 
 module.exports = {
   getRolePanelByGuild,
   getRolePanelByGuildAndChannel,
+  createRolePanel,
+  getRolePanelById,
+  listRolePanelsByChannel,
   upsertRolePanel,
   addRolePanelButton,
   getButtonsByPanel,
   getButtonByIdForPanel,
   deleteRolePanelButton,
+  deleteRolePanel,
   updateRolePanelButton,
   sendOrUpdateRolePanel,
   reloadAllRolePanels,
