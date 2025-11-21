@@ -86,27 +86,47 @@ function calculateLevelFromXp(xp) {
  * Recalcula XP y nivel de un usuario en base a sus stats
  * y guarda el resultado en la tabla.
  */
-async function recalculateXpAndLevel(guildId, userId) {
+async function recalculateXpAndLevel(guildId, userId, client = null) {
   try {
+    // 1) Leemos stats actuales
     const [rows] = await pool.execute(
-      'SELECT * FROM user_stats WHERE guild_id = ? AND user_id = ?',
+      'SELECT messages_count, voice_seconds, xp, lvl FROM user_stats WHERE guild_id = ? AND user_id = ?',
       [guildId, userId]
     );
-    if (!rows.length) return null;
 
-    const stats = rows[0];
-    const xp = calculateXpFromStats(stats);
-    const lvl = calculateLevelFromXp(xp);
+    if (!rows.length) {
+      return { oldLevel: 1, newLevel: 1 };
+    }
 
-    await pool.execute(
-      'UPDATE user_stats SET xp = ?, lvl = ? WHERE guild_id = ? AND user_id = ?',
-      [xp, lvl, guildId, userId]
-    );
+    const current = rows[0];
+    const oldLevel = current.lvl;
+    const oldXp = current.xp;
 
-    return { ...stats, xp, lvl };
+    // 2) Calculamos XP a partir de stats
+    const newXp = calculateXpFromStats({
+      messages_count: current.messages_count,
+      voice_seconds: current.voice_seconds
+    });
+
+    const newLevel = calculateLevelFromXp(newXp);
+
+    // 3) Guardamos si cambió
+    if (newXp !== oldXp || newLevel !== oldLevel) {
+      await pool.execute(
+        'UPDATE user_stats SET xp = ?, lvl = ? WHERE guild_id = ? AND user_id = ?',
+        [newXp, newLevel, guildId, userId]
+      );
+    }
+
+    // 4) Si subió de nivel y tenemos client → anunciamos
+    if (client && newLevel > oldLevel) {
+      await announceLevelUp(client, guildId, userId, newLevel);
+    }
+
+    return { oldLevel, newLevel };
   } catch (err) {
     logger.error('Error en recalculateXpAndLevel:', err);
-    return null;
+    return { oldLevel: null, newLevel: null };
   }
 }
 

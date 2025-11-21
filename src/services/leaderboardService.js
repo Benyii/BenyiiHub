@@ -11,29 +11,15 @@ const {
  * Asegura el registro del usuario en la tabla user_stats y suma +1 mensaje.
  * Luego recalcula XP y nivel.
  */
-async function incrementMessageCount(guildId, userId) {
+async function incrementMessageCount(client, guildId, userId) {
   const sql = `
-    INSERT INTO user_stats (
-      guild_id,
-      user_id,
-      messages_count,
-      voice_seconds,
-      voice_sessions,
-      last_join_voice_at,
-      joined_at,
-      xp,
-      lvl
-    )
-    VALUES (?, ?, 1, 0, 0, NULL, NULL, 0, 1)
-    ON DUPLICATE KEY UPDATE
-      messages_count = messages_count + 1;
+    UPDATE user_stats
+    SET messages_count = messages_count + 1
+    WHERE guild_id = ? AND user_id = ?
   `;
-
   try {
     await pool.execute(sql, [guildId, userId]);
-
-    // Recalcular XP y nivel con la nueva lógica
-    await recalculateXpAndLevel(guildId, userId);
+    await recalculateXpAndLevel(guildId, userId, client); // <-- ahora pasa el client
   } catch (err) {
     logger.error('Error incrementMessageCount:', err);
   }

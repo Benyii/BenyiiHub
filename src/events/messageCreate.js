@@ -1,3 +1,4 @@
+// src/events/messageCreate.js
 const leaderboardService = require('../services/leaderboardService');
 
 module.exports = {
@@ -6,6 +7,10 @@ module.exports = {
     if (message.author.bot) return;
     if (!message.guild) return;
 
-    await leaderboardService.incrementMessageCount(message.guild.id, message.author.id);
+    await leaderboardService.incrementMessageCount(
+      message.client,              // <-- pasa el client
+      message.guild.id,
+      message.author.id
+    );
   }
 };
