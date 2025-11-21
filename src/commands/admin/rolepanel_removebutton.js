@@ -5,7 +5,7 @@ const {
 } = require('discord.js');
 const logger = require('../../config/logger');
 const {
-  getRolePanelByGuild,
+  getRolePanelByGuildAndChannel,
   getButtonByIdForPanel,
   deleteRolePanelButton,
   sendOrUpdateRolePanel
@@ -14,12 +14,18 @@ const {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('rolepanel_removebutton')
-    .setDescription('Elimina un botón del panel de roles por ID.')
+    .setDescription('Elimina un botón de un panel de roles.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addChannelOption(option =>
+      option
+        .setName('canal')
+        .setDescription('Canal donde está el panel de roles (por defecto, este canal).')
+        .setRequired(false)
+    )
     .addIntegerOption(option =>
       option
         .setName('button_id')
-        .setDescription('ID del botón a eliminar (ver /rolepanel_listbuttons)')
+        .setDescription('ID del botón a eliminar (ver /rolepanel_listbuttons).')
         .setRequired(true)
     ),
 
@@ -30,11 +36,19 @@ module.exports = {
 
     try {
       const guildId = interaction.guild.id;
-      const panel = await getRolePanelByGuild(guildId);
+      const channelOption = interaction.options.getChannel('canal');
+      const targetChannel = channelOption || interaction.channel;
+
+      if (!targetChannel.isTextBased()) {
+        await interaction.editReply('❌ El canal debe ser un canal de texto.');
+        return;
+      }
+
+      const panel = await getRolePanelByGuildAndChannel(guildId, targetChannel.id);
 
       if (!panel) {
         await interaction.editReply(
-          '❌ No hay un panel de roles configurado. Usa primero `/rolepanel_setup`.'
+          '❌ No hay un panel de roles configurado para ese canal. Usa `/rolepanel_setup` primero.'
         );
         return;
       }
@@ -53,7 +67,7 @@ module.exports = {
       await sendOrUpdateRolePanel(interaction.client, panel);
 
       await interaction.editReply(
-        `✅ Botón con ID \`${buttonId}\` eliminado correctamente.`
+        `✅ Botón con ID \`${buttonId}\` eliminado correctamente del panel en ${targetChannel}.`
       );
     } catch (err) {
       logger.error('Error en /rolepanel_removebutton:', err);

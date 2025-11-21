@@ -37,7 +37,7 @@ async function upsertRolePanel(guildId, channelId, panelTitle, panelBody) {
   `;
   try {
     await pool.execute(sql, [guildId, channelId, panelTitle, panelBody]);
-    const panel = await getRolePanelByGuild(guildId);
+    const panel = await getRolePanelByGuildAndChannel(guildId, channelId);
     return panel;
   } catch (err) {
     logger.error('Error en upsertRolePanel:', err);
@@ -390,8 +390,23 @@ async function handleRolePanelButton(interaction) {
   }
 }
 
+async function getRolePanelByGuildAndChannel(guildId, channelId) {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT * FROM role_panels WHERE guild_id = ? AND channel_id = ?',
+      [guildId, channelId]
+    );
+    return rows[0] || null;
+  } catch (err) {
+    logger.error('Error en getRolePanelByGuildAndChannel:', err);
+    return null;
+  }
+}
+
+
 module.exports = {
   getRolePanelByGuild,
+  getRolePanelByGuildAndChannel,
   upsertRolePanel,
   addRolePanelButton,
   getButtonsByPanel,

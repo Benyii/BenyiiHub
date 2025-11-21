@@ -5,7 +5,7 @@ const {
 } = require('discord.js');
 const logger = require('../../config/logger');
 const {
-  getRolePanelByGuild,
+  getRolePanelByGuildAndChannel,
   getButtonByIdForPanel,
   updateRolePanelButton,
   sendOrUpdateRolePanel
@@ -14,30 +14,30 @@ const {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('rolepanel_editbutton')
-    .setDescription('Edita las propiedades de un botón del panel de roles.')
+    .setDescription('Edita un botón de un panel de roles.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addChannelOption(option =>
+      option
+        .setName('canal')
+        .setDescription('Canal donde está el panel de roles (por defecto, este canal).')
+        .setRequired(false)
+    )
     .addIntegerOption(option =>
       option
         .setName('button_id')
-        .setDescription('ID del botón a editar (ver /rolepanel_listbuttons)')
+        .setDescription('ID del botón a editar (ver /rolepanel_listbuttons).')
         .setRequired(true)
     )
-    .addRoleOption(option =>
+    .addStringOption(option =>
       option
-        .setName('rol')
-        .setDescription('Nuevo rol que asignará este botón')
+        .setName('nuevo_texto')
+        .setDescription('Nuevo texto del botón.')
         .setRequired(false)
     )
     .addStringOption(option =>
       option
-        .setName('texto')
-        .setDescription('Nuevo texto del botón')
-        .setRequired(false)
-    )
-    .addStringOption(option =>
-      option
-        .setName('estilo')
-        .setDescription('Nuevo estilo/color del botón')
+        .setName('nuevo_estilo')
+        .setDescription('Nuevo estilo/color del botón.')
         .setRequired(false)
         .addChoices(
           { name: 'Primario (azul)', value: 'primary' },
@@ -48,8 +48,8 @@ module.exports = {
     )
     .addStringOption(option =>
       option
-        .setName('emoji')
-        .setDescription('Nuevo emoji (unicode o <:custom:123>); deja vacío para no cambiarlo')
+        .setName('nuevo_emoji')
+        .setDescription('Nuevo emoji del botón (unicode o <:custom:1234567890>).')
         .setRequired(false)
     ),
 
@@ -60,58 +60,55 @@ module.exports = {
 
     try {
       const guildId = interaction.guild.id;
-      const panel = await getRolePanelByGuild(guildId);
+      const channelOption = interaction.options.getChannel('canal');
+      const targetChannel = channelOption || interaction.channel;
+
+      if (!targetChannel.isTextBased()) {
+        await interaction.editReply('❌ El canal debe ser un canal de texto.');
+        return;
+      }
+
+      const panel = await getRolePanelByGuildAndChannel(guildId, targetChannel.id);
 
       if (!panel) {
         await interaction.editReply(
-          '❌ No hay un panel de roles configurado. Usa primero `/rolepanel_setup`.'
+          '❌ No hay un panel de roles configurado para ese canal. Usa `/rolepanel_setup` primero.'
         );
         return;
       }
 
       const buttonId = interaction.options.getInteger('button_id', true);
-      const currentButton = await getButtonByIdForPanel(panel.id, buttonId);
+      const button = await getButtonByIdForPanel(panel.id, buttonId);
 
-      if (!currentButton) {
+      if (!button) {
         await interaction.editReply(
           `❌ No existe un botón con ID \`${buttonId}\` en este panel.`
         );
         return;
       }
 
-      const role = interaction.options.getRole('rol') || null;
-      const texto = interaction.options.getString('texto');
-      const estilo = interaction.options.getString('estilo');
-      const emoji = interaction.options.getString('emoji');
+      const nuevoTexto = interaction.options.getString('nuevo_texto');
+      const nuevoEstilo = interaction.options.getString('nuevo_estilo');
+      const nuevoEmoji = interaction.options.getString('nuevo_emoji');
 
-      if (!role && !texto && !estilo && emoji === null) {
+      if (!nuevoTexto && !nuevoEstilo && !nuevoEmoji) {
         await interaction.editReply(
-          '❌ Debes indicar al menos un campo a editar (rol, texto, estilo o emoji).'
+          'ℹ️ Debes indicar al menos un campo para actualizar (texto, estilo o emoji).'
         );
         return;
       }
 
-      const updatePayload = {};
+      const fieldsToUpdate = {
+        label: nuevoTexto ?? button.label,
+        style: nuevoEstilo ?? button.style,
+        emoji: nuevoEmoji ?? button.emoji
+      };
 
-      if (role) {
-        updatePayload.roleId = role.id;
-      }
-      if (texto !== null && texto !== undefined) {
-        updatePayload.label = texto;
-      }
-      if (estilo !== null && estilo !== undefined) {
-        updatePayload.style = estilo;
-      }
-      if (emoji !== undefined) {
-        // si emoji viene como string vacío, lo interpretamos como "sin emoji"
-        updatePayload.emoji = emoji && emoji.trim().length ? emoji.trim() : null;
-      }
-
-      await updateRolePanelButton(panel.id, buttonId, updatePayload);
+      await updateRolePanelButton(panel.id, buttonId, fieldsToUpdate);
       await sendOrUpdateRolePanel(interaction.client, panel);
 
       await interaction.editReply(
-        `✅ Botón con ID \`${buttonId}\` actualizado correctamente.`
+        `✅ Botón con ID \`${buttonId}\` actualizado correctamente en el panel de ${targetChannel}.`
       );
     } catch (err) {
       logger.error('Error en /rolepanel_editbutton:', err);

@@ -5,7 +5,7 @@ const {
 } = require('discord.js');
 const logger = require('../../config/logger');
 const {
-  getRolePanelByGuild,
+  getRolePanelByGuildAndChannel,
   addRolePanelButton,
   sendOrUpdateRolePanel
 } = require('../../services/rolePanelService');
@@ -13,24 +13,30 @@ const {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('rolepanel_addbutton')
-    .setDescription('Agrega un botón al panel de roles actual.')
+    .setDescription('Agrega un botón a un panel de roles.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addChannelOption(option =>
+      option
+        .setName('canal')
+        .setDescription('Canal donde está el panel de roles (por defecto, este canal).')
+        .setRequired(false)
+    )
     .addRoleOption(option =>
       option
         .setName('rol')
-        .setDescription('Rol que se asignará/quitará al pulsar el botón')
+        .setDescription('Rol que se asignará/quitará al pulsar el botón.')
         .setRequired(true)
     )
     .addStringOption(option =>
       option
         .setName('texto')
-        .setDescription('Texto del botón')
+        .setDescription('Texto del botón.')
         .setRequired(true)
     )
     .addStringOption(option =>
       option
         .setName('estilo')
-        .setDescription('Color del botón')
+        .setDescription('Color del botón.')
         .setRequired(true)
         .addChoices(
           { name: 'Primario (azul)', value: 'primary' },
@@ -42,7 +48,7 @@ module.exports = {
     .addStringOption(option =>
       option
         .setName('emoji')
-        .setDescription('Emoji para el botón (unicode o <:custom:123>)')
+        .setDescription('Emoji para el botón (unicode o <:custom:1234567890>).')
         .setRequired(false)
     ),
 
@@ -53,11 +59,19 @@ module.exports = {
 
     try {
       const guildId = interaction.guild.id;
-      const panel = await getRolePanelByGuild(guildId);
+      const channelOption = interaction.options.getChannel('canal');
+      const targetChannel = channelOption || interaction.channel;
+
+      if (!targetChannel.isTextBased()) {
+        await interaction.editReply('❌ El canal debe ser un canal de texto.');
+        return;
+      }
+
+      const panel = await getRolePanelByGuildAndChannel(guildId, targetChannel.id);
 
       if (!panel) {
         await interaction.editReply(
-          '❌ No hay un panel de roles configurado. Usa primero `/rolepanel_setup`.'
+          '❌ No hay un panel de roles configurado para ese canal. Usa `/rolepanel_setup` primero.'
         );
         return;
       }
@@ -71,7 +85,7 @@ module.exports = {
       await sendOrUpdateRolePanel(interaction.client, panel);
 
       await interaction.editReply(
-        `✅ Botón agregado para el rol ${role} con texto "**${texto}**".`
+        `✅ Botón agregado para el rol ${role} con texto "**${texto}**" en ${targetChannel}.`
       );
     } catch (err) {
       logger.error('Error en /rolepanel_addbutton:', err);

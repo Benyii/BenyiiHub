@@ -5,15 +5,21 @@ const {
 } = require('discord.js');
 const logger = require('../../config/logger');
 const {
-  getRolePanelByGuild,
+  getRolePanelByGuildAndChannel,
   getButtonsByPanel
 } = require('../../services/rolePanelService');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('rolepanel_listbuttons')
-    .setDescription('Muestra los botones configurados en el panel de roles actual.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    .setDescription('Muestra los botones configurados en un panel de roles.')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addChannelOption(option =>
+      option
+        .setName('canal')
+        .setDescription('Canal donde está el panel de roles (por defecto, este canal).')
+        .setRequired(false)
+    ),
 
   isAdmin: true,
 
@@ -22,11 +28,19 @@ module.exports = {
 
     try {
       const guildId = interaction.guild.id;
-      const panel = await getRolePanelByGuild(guildId);
+      const channelOption = interaction.options.getChannel('canal');
+      const targetChannel = channelOption || interaction.channel;
+
+      if (!targetChannel.isTextBased()) {
+        await interaction.editReply('❌ El canal debe ser un canal de texto.');
+        return;
+      }
+
+      const panel = await getRolePanelByGuildAndChannel(guildId, targetChannel.id);
 
       if (!panel) {
         await interaction.editReply(
-          '❌ No hay un panel de roles configurado. Usa primero `/rolepanel_setup`.'
+          '❌ No hay un panel de roles configurado para ese canal. Usa `/rolepanel_setup` primero.'
         );
         return;
       }
@@ -34,24 +48,22 @@ module.exports = {
       const buttons = await getButtonsByPanel(panel.id);
 
       if (!buttons.length) {
-        await interaction.editReply(
-          '📭 No hay botones configurados en el panel de roles.'
-        );
+        await interaction.editReply('ℹ️ Este panel no tiene ningún botón configurado.');
         return;
       }
 
-      const lines = buttons.map(b => {
-        const emoji = b.emoji ? `${b.emoji} ` : '';
-        return `• ID: \`${b.id}\` — Rol: <@&${b.role_id}> — ${emoji}**${b.label}** [${b.style}]`;
+      const lines = buttons.map(btn => {
+        const emoji = btn.emoji ? btn.emoji + ' ' : '';
+        return `• ID \`${btn.id}\` → ${emoji}**${btn.label}** (rol <@&${btn.role_id}>, estilo \`${btn.style}\`)`;
       });
 
       await interaction.editReply(
-        `🧩 Botones configurados en el panel de roles:\n\n${lines.join('\n')}`
+        `📋 Botones configurados para el panel en ${targetChannel}:\n\n${lines.join('\n')}`
       );
     } catch (err) {
       logger.error('Error en /rolepanel_listbuttons:', err);
       await interaction.editReply(
-        '❌ Ocurrió un error listando los botones del panel de roles.'
+        '❌ Ocurrió un error obteniendo los botones del panel de roles.'
       );
     }
   }
