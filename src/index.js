@@ -23,7 +23,8 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.DirectMessages   // 👈 AGREGA ESTA
   ],
   partials: [Partials.Channel, Partials.GuildMember, Partials.Message, Partials.User]
 });

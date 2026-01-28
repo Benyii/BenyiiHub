@@ -14,6 +14,12 @@ module.exports = {
     // Ignorar mensajes de bots
     if (message.author.bot) return;
 
+    console.log('Llego mensaje:', {
+      guild: !!message.guild,
+      author: message.author.tag,
+      content: message.content
+    });
+
     /* =========================================
      * 1) Easter Egg en DMs (mensajes privados)
      * ========================================= */
