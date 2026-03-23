@@ -167,6 +167,7 @@ async function checkTwitchStreams(client) {
 
 /**
  * Arranca el intervalo del watcher.
+ * El guard isChecking evita ejecuciones concurrentes si un ciclo tarda más que el intervalo.
  */
 function startTwitchWatcher(client) {
   const intervalSec = Number(process.env.TWITCH_POLL_INTERVAL || '60');
@@ -174,8 +175,16 @@ function startTwitchWatcher(client) {
 
   logger.info(`Iniciando watcher de Twitch cada ${ms / 1000}s...`);
 
-  setInterval(() => {
-    checkTwitchStreams(client);
+  let isChecking = false;
+
+  setInterval(async () => {
+    if (isChecking) return;
+    isChecking = true;
+    try {
+      await checkTwitchStreams(client);
+    } finally {
+      isChecking = false;
+    }
   }, ms);
 }
 

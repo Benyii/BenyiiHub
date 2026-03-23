@@ -7,34 +7,19 @@ const logger = require('../config/logger');
  */
 async function ensureUserStats(guildId, userId) {
   try {
+    // INSERT IGNORE: no falla si ya existe, evita el triple SELECT→INSERT→SELECT
+    await pool.execute(
+      `INSERT IGNORE INTO user_stats
+         (guild_id, user_id, messages_count, voice_seconds, voice_sessions,
+          last_join_voice_at, joined_at, xp, lvl)
+       VALUES (?, ?, 0, 0, 0, NULL, NULL, 0, 1)`,
+      [guildId, userId]
+    );
     const [rows] = await pool.execute(
       'SELECT * FROM user_stats WHERE guild_id = ? AND user_id = ?',
       [guildId, userId]
     );
-
-    if (rows.length) return rows[0];
-
-    await pool.execute(
-      `INSERT INTO user_stats (
-         guild_id,
-         user_id,
-         messages_count,
-         voice_seconds,
-         voice_sessions,
-         last_join_voice_at,
-         joined_at,
-         xp,
-         lvl
-       )
-       VALUES (?, ?, 0, 0, 0, NULL, NULL, 0, 1)`,
-      [guildId, userId]
-    );
-
-    const [rows2] = await pool.execute(
-      'SELECT * FROM user_stats WHERE guild_id = ? AND user_id = ?',
-      [guildId, userId]
-    );
-    return rows2[0];
+    return rows[0] || null;
   } catch (err) {
     logger.error('Error en ensureUserStats:', err);
     return null;
@@ -175,41 +160,9 @@ async function getLeaderboardStats(guildId, limit = 10) {
  */
 async function getUserRankData(guildId, userId) {
   try {
-    // Aseguramos que exista el registro
+    // 1) Un solo SELECT que ya trae joined_at + days_in_guild calculado
     const [rows] = await pool.execute(
-      'SELECT * FROM user_stats WHERE guild_id = ? AND user_id = ?',
-      [guildId, userId]
-    );
-
-    if (!rows.length) {
-      // si quieres, aquí podrías llamar ensureUserStats, pero para rank
-      // devolvemos null si no hay actividad
-      return null;
-    }
-
-    const statsRow = rows[0];
-
-    // 1) Recalculamos XP y nivel a partir de mensajes/voz
-    const xp = calculateXpFromStats(statsRow);
-    const lvl = calculateLevelFromXp(xp);
-
-    // 2) Actualizamos la fila con los valores recalculados
-    await pool.execute(
-      'UPDATE user_stats SET xp = ?, lvl = ? WHERE guild_id = ? AND user_id = ?',
-      [xp, lvl, guildId, userId]
-    );
-
-    // 3) Calculamos el rank usando el mismo XP
-    const [rankRows] = await pool.execute(
-      'SELECT COUNT(*) + 1 AS rank FROM user_stats WHERE guild_id = ? AND xp > ?',
-      [guildId, xp]
-    );
-    const rank = rankRows[0]?.rank ?? 1;
-
-    // 4) Días en el servidor (misma lógica que el leaderboard)
-    const [daysRows] = await pool.execute(
-      `SELECT
-         joined_at,
+      `SELECT *,
          CASE
            WHEN joined_at IS NULL THEN NULL
            ELSE TIMESTAMPDIFF(DAY, joined_at, NOW())
@@ -219,15 +172,31 @@ async function getUserRankData(guildId, userId) {
       [guildId, userId]
     );
 
-    const joined_at = daysRows[0]?.joined_at ?? null;
-    const days_in_guild = daysRows[0]?.days_in_guild ?? null;
+    if (!rows.length) return null;
+
+    const statsRow = rows[0];
+
+    // 2) Recalculamos XP y nivel
+    const xp = calculateXpFromStats(statsRow);
+    const lvl = calculateLevelFromXp(xp);
+
+    await pool.execute(
+      'UPDATE user_stats SET xp = ?, lvl = ? WHERE guild_id = ? AND user_id = ?',
+      [xp, lvl, guildId, userId]
+    );
+
+    // 3) Posición en el ranking
+    const [rankRows] = await pool.execute(
+      'SELECT COUNT(*) + 1 AS rank FROM user_stats WHERE guild_id = ? AND xp > ?',
+      [guildId, xp]
+    );
 
     return {
       xp,
       lvl,
-      rank,
-      joined_at,
-      days_in_guild
+      rank:         rankRows[0]?.rank ?? 1,
+      joined_at:    statsRow.joined_at,
+      days_in_guild: statsRow.days_in_guild
     };
   } catch (err) {
     logger.error('Error en getUserRankData:', err);

@@ -2,10 +2,43 @@
 const pool = require('../config/database');
 const logger = require('../config/logger');
 
+/* ───────────────────────────────────────── */
+/*  Caché en memoria de filas de guild       */
+/* ───────────────────────────────────────── */
+
+const guildRowCache = new Map(); // guildId → { row, expiry }
+const GUILD_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
 /**
- * Inserta o actualiza un guild en la tabla `guilds`.
- * Asegura que existan columnas base y flags con defaults.
+ * Obtiene la fila completa del guild desde la caché o la BD.
+ * Evita múltiples queries a la misma tabla guilds por evento.
  */
+async function getGuildRow(guildId) {
+  const cached = guildRowCache.get(guildId);
+  if (cached && Date.now() < cached.expiry) return cached.row;
+
+  try {
+    const [rows] = await pool.execute('SELECT * FROM guilds WHERE id = ?', [guildId]);
+    const row = rows[0] || null;
+    guildRowCache.set(guildId, { row, expiry: Date.now() + GUILD_CACHE_TTL });
+    return row;
+  } catch (err) {
+    logger.error(`Error obteniendo fila de guild ${guildId}:`, err);
+    return null;
+  }
+}
+
+/**
+ * Invalida la caché de un guild. Llamar después de cualquier UPDATE/INSERT en guilds.
+ */
+function invalidateGuildCache(guildId) {
+  guildRowCache.delete(guildId);
+}
+
+/* ───────────────────────────────────────── */
+/*  Gestión de guilds                        */
+/* ───────────────────────────────────────── */
+
 async function upsertGuild(guildId, name) {
   const sql = `
     INSERT INTO guilds (
@@ -26,18 +59,15 @@ async function upsertGuild(guildId, name) {
   `;
   try {
     await pool.execute(sql, [guildId, name]);
+    invalidateGuildCache(guildId);
   } catch (err) {
     logger.error(`Error guardando guild ${guildId} (${name}):`, err);
   }
 }
 
-/**
- * Sincroniza todos los servidores donde está el bot con la tabla `guilds`.
- */
 async function syncGuilds(client) {
   try {
     const guilds = client.guilds.cache;
-
     logger.info(`Sincronizando ${guilds.size} servidores con la base de datos...`);
 
     const promises = [];
@@ -46,16 +76,12 @@ async function syncGuilds(client) {
     }
 
     await Promise.all(promises);
-
     logger.info('Sincronización de servidores completada.');
   } catch (err) {
     logger.error('Error general en syncGuilds:', err);
   }
 }
 
-/**
- * Devuelve los IDs de los guilds que NO tienen log_channel configurado.
- */
 async function getGuildsWithoutLogChannel() {
   try {
     const [rows] = await pool.execute(
@@ -68,23 +94,21 @@ async function getGuildsWithoutLogChannel() {
   }
 }
 
-/**
- * Configura el canal de logs "principal" para un guild.
- */
+/* ───────────────────────────────────────── */
+/*  Log channel principal                    */
+/* ───────────────────────────────────────── */
+
 async function setLogChannel(guildId, channelId) {
   try {
     const sql = `
-      INSERT INTO guilds (
-        id,
-        name,
-        log_channel_id
-      )
+      INSERT INTO guilds (id, name, log_channel_id)
       VALUES (?, '', ?)
       ON DUPLICATE KEY UPDATE
         log_channel_id = VALUES(log_channel_id),
         updated_at = CURRENT_TIMESTAMP;
     `;
     await pool.execute(sql, [guildId, channelId]);
+    invalidateGuildCache(guildId);
     logger.info(`Log channel configurado para guild ${guildId}: ${channelId}`);
   } catch (err) {
     logger.error('Error configurando log_channel:', err);
@@ -92,10 +116,6 @@ async function setLogChannel(guildId, channelId) {
   }
 }
 
-/**
- * Devuelve todos los guilds que tienen canal de logs principal configurado.
- * [{ id, log_channel_id }]
- */
 async function getAllGuildLogChannels() {
   try {
     const [rows] = await pool.execute(
@@ -108,44 +128,31 @@ async function getAllGuildLogChannels() {
   }
 }
 
-/**
- * Devuelve el canal de logs principal de un guild (log_channel_id) o null.
- */
 async function getGuildLogChannel(guildId) {
   try {
-    const [rows] = await pool.execute(
-      'SELECT log_channel_id FROM guilds WHERE id = ?',
-      [guildId]
-    );
-    if (!rows.length) return null;
-    return rows[0].log_channel_id || null;
+    const row = await getGuildRow(guildId);
+    return row?.log_channel_id || null;
   } catch (err) {
     logger.error('Error obteniendo log_channel_id para guild ' + guildId, err);
     return null;
   }
 }
 
-/* ──────────────────────────────── */
-/* USER EVENT LOGS (mensajes/voz)  */
-/* ──────────────────────────────── */
+/* ───────────────────────────────────────── */
+/*  User event logs (mensajes / voz)         */
+/* ───────────────────────────────────────── */
 
-/**
- * Configura el canal de logs de eventos de usuario (mensajes/voz) para un guild.
- */
 async function setUserEventLogChannel(guildId, channelId) {
   try {
     const sql = `
-      INSERT INTO guilds (
-        id,
-        name,
-        user_event_log_channel_id
-      )
+      INSERT INTO guilds (id, name, user_event_log_channel_id)
       VALUES (?, '', ?)
       ON DUPLICATE KEY UPDATE
         user_event_log_channel_id = VALUES(user_event_log_channel_id),
         updated_at = CURRENT_TIMESTAMP;
     `;
     await pool.execute(sql, [guildId, channelId]);
+    invalidateGuildCache(guildId);
     logger.info(`User event log channel configurado para guild ${guildId}: ${channelId}`);
   } catch (err) {
     logger.error('Error configurando user_event_log_channel_id:', err);
@@ -153,100 +160,44 @@ async function setUserEventLogChannel(guildId, channelId) {
   }
 }
 
-/**
- * Obtiene el canal de logs de eventos de usuario de un guild.
- * Devuelve string o null.
- */
 async function getUserEventLogChannel(guildId) {
   try {
-    const [rows] = await pool.execute(
-      'SELECT user_event_log_channel_id FROM guilds WHERE id = ?',
-      [guildId]
-    );
-    if (!rows.length) return null;
-    return rows[0].user_event_log_channel_id || null;
+    const row = await getGuildRow(guildId);
+    return row?.user_event_log_channel_id || null;
   } catch (err) {
     logger.error('Error obteniendo user_event_log_channel_id para guild ' + guildId, err);
     return null;
   }
 }
 
-/**
- * Devuelve los flags de configuración de logs de usuario para un guild.
- * Si no hay registro, devuelve todos en true.
- *
- * {
- *   messageDelete: boolean,
- *   messageEdit: boolean,
- *   voice: boolean
- * }
- */
 async function getUserLogFlags(guildId) {
   try {
-    const [rows] = await pool.execute(
-      `
-      SELECT
-        log_user_message_delete,
-        log_user_message_edit,
-        log_user_voice
-      FROM guilds
-      WHERE id = ?
-      `,
-      [guildId]
-    );
-
-    if (!rows.length) {
-      return {
-        messageDelete: true,
-        messageEdit: true,
-        voice: true
-      };
-    }
-
-    const row = rows[0];
+    const row = await getGuildRow(guildId);
+    if (!row) return { messageDelete: true, messageEdit: true, voice: true };
     return {
       messageDelete: !!row.log_user_message_delete,
-      messageEdit: !!row.log_user_message_edit,
-      voice: !!row.log_user_voice
+      messageEdit:   !!row.log_user_message_edit,
+      voice:         !!row.log_user_voice
     };
   } catch (err) {
     logger.error('Error obteniendo flags de user logs para guild ' + guildId, err);
-    return {
-      messageDelete: true,
-      messageEdit: true,
-      voice: true
-    };
+    return { messageDelete: true, messageEdit: true, voice: true };
   }
 }
 
-/**
- * Establece un flag específico de logs de usuario para un guild.
- * type: 'delete' | 'edit' | 'voice'
- */
 async function setUserLogFlag(guildId, type, enabled) {
   const value = enabled ? 1 : 0;
 
   let column;
   switch (type) {
-    case 'delete':
-      column = 'log_user_message_delete';
-      break;
-    case 'edit':
-      column = 'log_user_message_edit';
-      break;
-    case 'voice':
-      column = 'log_user_voice';
-      break;
-    default:
-      throw new Error(`Tipo de flag de logs de usuario no válido: ${type}`);
+    case 'delete': column = 'log_user_message_delete'; break;
+    case 'edit':   column = 'log_user_message_edit';   break;
+    case 'voice':  column = 'log_user_voice';          break;
+    default: throw new Error(`Tipo de flag de logs de usuario no válido: ${type}`);
   }
 
   const sql = `
-    INSERT INTO guilds (
-      id,
-      name,
-      ${column}
-    )
+    INSERT INTO guilds (id, name, ${column})
     VALUES (?, '', ?)
     ON DUPLICATE KEY UPDATE
       ${column} = VALUES(${column}),
@@ -255,6 +206,7 @@ async function setUserLogFlag(guildId, type, enabled) {
 
   try {
     await pool.execute(sql, [guildId, value]);
+    invalidateGuildCache(guildId);
     logger.info(`Flag de user log "${type}" actualizado para guild ${guildId}: ${value}`);
   } catch (err) {
     logger.error(`Error actualizando flag "${type}" de user logs para guild ${guildId}:`, err);
@@ -262,27 +214,21 @@ async function setUserLogFlag(guildId, type, enabled) {
   }
 }
 
-/* ──────────────────────────────── */
-/* ADMIN EVENT LOGS                */
-/* ──────────────────────────────── */
+/* ───────────────────────────────────────── */
+/*  Admin event logs                         */
+/* ───────────────────────────────────────── */
 
-/**
- * Configura el canal de logs administrativos para un guild.
- */
 async function setAdminEventLogChannel(guildId, channelId) {
   try {
     const sql = `
-      INSERT INTO guilds (
-        id,
-        name,
-        admin_event_log_channel_id
-      )
+      INSERT INTO guilds (id, name, admin_event_log_channel_id)
       VALUES (?, '', ?)
       ON DUPLICATE KEY UPDATE
         admin_event_log_channel_id = VALUES(admin_event_log_channel_id),
         updated_at = CURRENT_TIMESTAMP;
     `;
     await pool.execute(sql, [guildId, channelId]);
+    invalidateGuildCache(guildId);
     logger.info(`Admin event log channel configurado para guild ${guildId}: ${channelId}`);
   } catch (err) {
     logger.error('Error configurando admin_event_log_channel_id:', err);
@@ -290,47 +236,29 @@ async function setAdminEventLogChannel(guildId, channelId) {
   }
 }
 
-/**
- * Obtiene el canal de logs administrativos de un guild.
- * Devuelve string o null.
- */
 async function getAdminEventLogChannel(guildId) {
   try {
-    const [rows] = await pool.execute(
-      'SELECT admin_event_log_channel_id FROM guilds WHERE id = ?',
-      [guildId]
-    );
-    if (!rows.length) return null;
-    return rows[0].admin_event_log_channel_id || null;
+    const row = await getGuildRow(guildId);
+    return row?.admin_event_log_channel_id || null;
   } catch (err) {
     logger.error('Error obteniendo admin_event_log_channel_id para guild ' + guildId, err);
     return null;
   }
 }
 
-/**
- * Devuelve si los logs admin están activos.
- */
 async function getAdminLogFlag(guildId) {
   try {
-    const [rows] = await pool.execute(
-      'SELECT log_admin_events FROM guilds WHERE id = ?',
-      [guildId]
-    );
-    if (!rows.length) return true;
-    return !!rows[0].log_admin_events;
+    const row = await getGuildRow(guildId);
+    if (!row) return true;
+    return !!row.log_admin_events;
   } catch (err) {
     logger.error('Error obteniendo flag de admin logs para guild ' + guildId, err);
     return true;
   }
 }
 
-/**
- * Activa / desactiva logs admin para un guild.
- */
 async function setAdminLogFlag(guildId, enabled) {
   const value = enabled ? 1 : 0;
-
   const sql = `
     INSERT INTO guilds (id, name, log_admin_events)
     VALUES (?, '', ?)
@@ -338,9 +266,9 @@ async function setAdminLogFlag(guildId, enabled) {
       log_admin_events = VALUES(log_admin_events),
       updated_at = CURRENT_TIMESTAMP;
   `;
-
   try {
     await pool.execute(sql, [guildId, value]);
+    invalidateGuildCache(guildId);
     logger.info(`Flag de admin logs actualizado para guild ${guildId}: ${value}`);
   } catch (err) {
     logger.error(`Error actualizando flag de admin logs para guild ${guildId}:`, err);
@@ -348,9 +276,9 @@ async function setAdminLogFlag(guildId, enabled) {
   }
 }
 
-/* ──────────────────────────────── */
-/* ROLES DE PING (NEWS / STREAMS)  */
-/* ──────────────────────────────── */
+/* ───────────────────────────────────────── */
+/*  Roles de ping (news / streams)           */
+/* ───────────────────────────────────────── */
 
 async function setNewsPingRole(guildId, roleId) {
   const sql = `
@@ -362,6 +290,7 @@ async function setNewsPingRole(guildId, roleId) {
   `;
   try {
     await pool.execute(sql, [guildId, roleId]);
+    invalidateGuildCache(guildId);
     logger.info(`News ping role configurado para guild ${guildId}: ${roleId}`);
   } catch (err) {
     logger.error(`Error configurando news_ping_role_id para guild ${guildId}:`, err);
@@ -370,12 +299,8 @@ async function setNewsPingRole(guildId, roleId) {
 
 async function getNewsPingRole(guildId) {
   try {
-    const [rows] = await pool.execute(
-      'SELECT news_ping_role_id FROM guilds WHERE id = ?',
-      [guildId]
-    );
-    if (!rows.length) return null;
-    return rows[0].news_ping_role_id || null;
+    const row = await getGuildRow(guildId);
+    return row?.news_ping_role_id || null;
   } catch (err) {
     logger.error(`Error obteniendo news_ping_role_id para guild ${guildId}:`, err);
     return null;
@@ -392,6 +317,7 @@ async function setStreamsPingRole(guildId, roleId) {
   `;
   try {
     await pool.execute(sql, [guildId, roleId]);
+    invalidateGuildCache(guildId);
     logger.info(`Streams ping role configurado para guild ${guildId}: ${roleId}`);
   } catch (err) {
     logger.error(`Error configurando streams_ping_role_id para guild ${guildId}:`, err);
@@ -400,21 +326,17 @@ async function setStreamsPingRole(guildId, roleId) {
 
 async function getStreamsPingRole(guildId) {
   try {
-    const [rows] = await pool.execute(
-      'SELECT streams_ping_role_id FROM guilds WHERE id = ?',
-      [guildId]
-    );
-    if (!rows.length) return null;
-    return rows[0].streams_ping_role_id || null;
+    const row = await getGuildRow(guildId);
+    return row?.streams_ping_role_id || null;
   } catch (err) {
     logger.error(`Error obteniendo streams_ping_role_id para guild ${guildId}:`, err);
     return null;
   }
 }
 
-/* ──────────────────────────────── */
-/* CANAL DE ANUNCIOS DE STREAMS    */
-/* ──────────────────────────────── */
+/* ───────────────────────────────────────── */
+/*  Canal de anuncios de streams             */
+/* ───────────────────────────────────────── */
 
 async function setStreamAnnounceChannel(guildId, channelId) {
   const sql = `
@@ -426,6 +348,7 @@ async function setStreamAnnounceChannel(guildId, channelId) {
   `;
   try {
     await pool.execute(sql, [guildId, channelId]);
+    invalidateGuildCache(guildId);
     logger.info(`Stream announce channel configurado para guild ${guildId}: ${channelId}`);
   } catch (err) {
     logger.error(`Error configurando stream_announce_channel_id para guild ${guildId}:`, err);
@@ -434,28 +357,25 @@ async function setStreamAnnounceChannel(guildId, channelId) {
 
 async function getStreamAnnounceChannel(guildId) {
   try {
-    const [rows] = await pool.execute(
-      'SELECT stream_announce_channel_id FROM guilds WHERE id = ?',
-      [guildId]
-    );
-    if (!rows.length) return null;
-    return rows[0].stream_announce_channel_id || null;
+    const row = await getGuildRow(guildId);
+    return row?.stream_announce_channel_id || null;
   } catch (err) {
     logger.error(`Error obteniendo stream_announce_channel_id para guild ${guildId}:`, err);
     return null;
   }
 }
 
-// ================== Welcome / Boost config ==================
+/* ───────────────────────────────────────── */
+/*  Welcome / Boost config                   */
+/* ───────────────────────────────────────── */
 
 async function setWelcomeChannel(guildId, channelId, enabled) {
   try {
     await pool.execute(
-      `UPDATE guilds
-       SET welcome_channel_id = ?, welcome_enabled = ?
-       WHERE id = ?`,
+      `UPDATE guilds SET welcome_channel_id = ?, welcome_enabled = ? WHERE id = ?`,
       [channelId, enabled ? 1 : 0, guildId]
     );
+    invalidateGuildCache(guildId);
   } catch (err) {
     logger.error('Error en setWelcomeChannel:', err);
     throw err;
@@ -465,11 +385,10 @@ async function setWelcomeChannel(guildId, channelId, enabled) {
 async function setBoostChannel(guildId, channelId, enabled) {
   try {
     await pool.execute(
-      `UPDATE guilds
-       SET boost_channel_id = ?, boost_enabled = ?
-       WHERE id = ?`,
+      `UPDATE guilds SET boost_channel_id = ?, boost_enabled = ? WHERE id = ?`,
       [channelId, enabled ? 1 : 0, guildId]
     );
+    invalidateGuildCache(guildId);
   } catch (err) {
     logger.error('Error en setBoostChannel:', err);
     throw err;
@@ -478,18 +397,16 @@ async function setBoostChannel(guildId, channelId, enabled) {
 
 async function getWelcomeBoostSettings(guildId) {
   try {
-    const [rows] = await pool.execute(
-      `SELECT welcome_channel_id,
-              welcome_enabled,
-              boost_channel_id,
-              boost_enabled,
-              short_guild_name,
-              welcome_custom_message
-       FROM guilds
-       WHERE id = ?`,
-      [guildId]
-    );
-    return rows[0] || null;
+    const row = await getGuildRow(guildId);
+    if (!row) return null;
+    return {
+      welcome_channel_id:    row.welcome_channel_id    ?? null,
+      welcome_enabled:       row.welcome_enabled       ?? null,
+      boost_channel_id:      row.boost_channel_id      ?? null,
+      boost_enabled:         row.boost_enabled         ?? null,
+      short_guild_name:      row.short_guild_name      ?? null,
+      welcome_custom_message: row.welcome_custom_message ?? null
+    };
   } catch (err) {
     logger.error('Error en getWelcomeBoostSettings:', err);
     return null;
@@ -499,11 +416,10 @@ async function getWelcomeBoostSettings(guildId) {
 async function setShortGuildName(guildId, shortName) {
   try {
     await pool.execute(
-      `UPDATE guilds
-       SET short_guild_name = ?
-       WHERE id = ?`,
+      `UPDATE guilds SET short_guild_name = ? WHERE id = ?`,
       [shortName || null, guildId]
     );
+    invalidateGuildCache(guildId);
   } catch (err) {
     logger.error('Error en setShortGuildName:', err);
     throw err;
@@ -513,33 +429,30 @@ async function setShortGuildName(guildId, shortName) {
 async function setWelcomeCustomMessage(guildId, message) {
   try {
     await pool.execute(
-      `UPDATE guilds
-       SET welcome_custom_message = ?
-       WHERE id = ?`,
+      `UPDATE guilds SET welcome_custom_message = ? WHERE id = ?`,
       [message || null, guildId]
     );
+    invalidateGuildCache(guildId);
   } catch (err) {
     logger.error('Error en setWelcomeCustomMessage:', err);
     throw err;
   }
 }
 
-// ============================================
-//              AUTO ROLES
-// ============================================
+/* ───────────────────────────────────────── */
+/*  Auto roles                               */
+/* ───────────────────────────────────────── */
 
 async function addAutoRole(guildId, roleId) {
   await pool.execute(
-    `INSERT INTO guild_autoroles (guild_id, role_id)
-     VALUES (?, ?)`,
+    `INSERT INTO guild_autoroles (guild_id, role_id) VALUES (?, ?)`,
     [guildId, roleId]
   );
 }
 
 async function removeAutoRole(guildId, roleId) {
   await pool.execute(
-    `DELETE FROM guild_autoroles
-     WHERE guild_id = ? AND role_id = ?`,
+    `DELETE FROM guild_autoroles WHERE guild_id = ? AND role_id = ?`,
     [guildId, roleId]
   );
 }
@@ -560,6 +473,7 @@ module.exports = {
   setLogChannel,
   getAllGuildLogChannels,
   getGuildLogChannel,
+  invalidateGuildCache,
 
   setUserEventLogChannel,
   getUserEventLogChannel,

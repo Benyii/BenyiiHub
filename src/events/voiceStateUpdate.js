@@ -24,9 +24,12 @@ module.exports = {
     const guild = oldState.guild || newState.guild;
     if (!guild) return;
 
+    // Ignorar eventos de bots
+    const member = newState.member || oldState.member;
+    if (member?.user?.bot) return;
+
     const guildId = guild.id;
     const userId = oldState.id || newState.id;
-    const member = newState.member || oldState.member;
 
     const userTag = member?.user ? `${member.user.tag} (${member.user.id})` : userId;
     const displayName =
