@@ -1,6 +1,6 @@
 const path = require('node:path');
 const { AttachmentBuilder } = require('discord.js');
-const { createCanvas, loadImage } = require('canvas');
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const logger = require('../config/logger');
 
 const BANNER_PATH = path.join(__dirname, '..', 'assets', 'welcome_banner.png');
@@ -114,7 +114,7 @@ async function generateWelcomeImage(member, shortGuildName) {
     await drawAvatar(ctx, canvas, member);
     drawText(ctx, canvas, member, 'welcome', shortGuildName);
 
-    const buffer = canvas.toBuffer('image/png');
+    const buffer = await canvas.encode('png');
     return new AttachmentBuilder(buffer, {
       name: `welcome-${member.id}.png`
     });
@@ -130,7 +130,7 @@ async function generateBoostImage(member) {
     await drawAvatar(ctx, canvas, member);
     drawText(ctx, canvas, member, 'boost');
 
-    const buffer = canvas.toBuffer('image/png');
+    const buffer = await canvas.encode('png');
     return new AttachmentBuilder(buffer, {
       name: `boost-${member.id}.png`
     });

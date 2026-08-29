@@ -1,5 +1,5 @@
 // src/services/rankCardService.js
-const { createCanvas, loadImage } = require('canvas');
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const { AttachmentBuilder } = require('discord.js');
 const logger = require('../config/logger');
 
@@ -135,7 +135,7 @@ async function generateRankCard(member, { xp, lvl, rank }) {
     ctx.arc(barX + barW * 0.7, barY + barH + 25, 12, 0, Math.PI * 2);
     ctx.fill();
 
-    const buffer = canvas.toBuffer('image/png');
+    const buffer = await canvas.encode('png');
     return new AttachmentBuilder(buffer, { name: 'rank.png' });
   } catch (err) {
     logger.error('Error generando Rank Card:', err);

@@ -120,6 +120,8 @@ async function recalculateXpAndLevel(guildId, userId, client = null) {
  * incluyendo días en el servidor.
  */
 async function getLeaderboardStats(guildId, limit = 10) {
+  // mysql2 en modo prepared falla si `LIMIT ?` recibe un string; forzamos entero.
+  const safeLimit = Math.min(100, Math.max(1, Math.trunc(Number(limit)) || 10));
   try {
     const [rows] = await pool.execute(
       `SELECT
@@ -140,7 +142,7 @@ async function getLeaderboardStats(guildId, limit = 10) {
        WHERE guild_id = ?
        ORDER BY xp DESC
        LIMIT ?`,
-      [guildId, limit]
+      [guildId, safeLimit]
     );
 
     return rows;

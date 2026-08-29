@@ -5,12 +5,10 @@ const {
   Client,
   Collection,
   GatewayIntentBits,
-  Partials,
-  Events
+  Partials
 } = require('discord.js');
 const { discord } = require('./config/config');
-const { startTwitchWatcher } = require('./services/twitchWatcher');
-const { reloadAllRolePanels } = require('./services/rolePanelService');
+const pool = require('./config/database');
 const logger = require('./config/logger');
 
 // Intents necesarios para:
@@ -77,15 +75,34 @@ for (const file of eventFiles) {
   }
 }
 
-// Evento de cliente listo
-client.once(Events.ClientReady, (c) => {
-  logger.info(`Bot iniciado como ${c.user.tag}`);
+// La inicialización "on ready" (twitch watcher, paneles de roles, sync de
+// guilds, avisos) vive toda en src/events/ready.js. Antes había además un
+// segundo handler de ClientReady aquí, que duplicaba el log "Bot iniciado".
 
-  // Inicia el watcher de Twitch (anuncios de streams)
-  startTwitchWatcher(client);
-  reloadAllRolePanels(client);
-  logger.info('Twitch watcher iniciado.');
+// Red de seguridad: no dejar caer el proceso por promesas sin manejar.
+process.on('unhandledRejection', (reason) => {
+  logger.error('Promesa rechazada sin manejar:', reason);
 });
+process.on('uncaughtException', (err) => {
+  logger.error('Excepción no capturada:', err);
+});
+
+// Apagado limpio (PM2 manda SIGINT en restart/stop).
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info(`Recibida señal ${signal}. Cerrando limpiamente...`);
+
+  const timer = setTimeout(() => process.exit(0), 5000);
+  if (typeof timer.unref === 'function') timer.unref();
+
+  try { await client.destroy(); } catch (e) { logger.error('Error cerrando cliente de Discord:', e); }
+  try { await pool.end(); } catch (e) { logger.error('Error cerrando el pool de MySQL:', e); }
+
+  process.exit(0);
+}
+['SIGINT', 'SIGTERM'].forEach((sig) => process.on(sig, () => shutdown(sig)));
 
 // Login del bot
 client.login(discord.token).catch(err => {

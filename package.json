@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "main": "src/index.js",
   "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
@@ -11,7 +14,6 @@
   "dependencies": {
     "@napi-rs/canvas": "^0.1.82",
     "axios": "^1.13.2",
-    "canvas": "^3.2.0",
     "discord.js": "^14.16.0",
     "dotenv": "^16.4.0",
     "mysql2": "^3.11.0"

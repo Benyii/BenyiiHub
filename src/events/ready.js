@@ -10,6 +10,8 @@ const {
 } = require('../services/guildService');
 const { sendLogToAllGuilds } = require('../services/logChannelService');
 const { logStatusForAllGuilds } = require('../services/statusLogService');
+const { startTwitchWatcher } = require('../services/twitchWatcher');
+const { reloadAllRolePanels } = require('../services/rolePanelService');
 
 /**
  * Devuelve el primer canal de texto donde el bot pueda enviar mensajes.
@@ -41,6 +43,15 @@ module.exports = {
   async execute(client) {
     logger.info(`Bot iniciado como ${client.user.tag}`);
     logger.info(`Actualmente en ${client.guilds.cache.size} servidores.`);
+
+    // 0) Servicios de fondo (antes se lanzaban desde src/index.js)
+    try {
+      startTwitchWatcher(client);
+      reloadAllRolePanels(client);
+      logger.info('Twitch watcher y paneles de roles inicializados.');
+    } catch (err) {
+      logger.error('Error inicializando servicios de fondo:', err);
+    }
 
     // 1) Sincronizar guilds con la DB
     await syncGuilds(client);

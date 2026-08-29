@@ -1,4 +1,15 @@
 node_modules/
+
+# Variables de entorno (dejar .env.example versionado)
 .env
+.env.*
+!.env.example
+
+# Logs
 npm-debug.log
+*.log
+logs/
+
+# Empaquetados / temporales
 *.zip
+.DS_Store
