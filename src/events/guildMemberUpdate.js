@@ -46,10 +46,13 @@ module.exports = {
       }
 
       /* ──────────────────────────────── */
-      /* 🔹 Cambio de nickname            */
+      /* 🔹 Cambio de apodo (SOLO nickname del servidor) */
       /* ──────────────────────────────── */
-      const oldNick = oldMember.nickname || oldMember.user.globalName || oldMember.user.username;
-      const newNick = newMember.nickname || newMember.user.globalName || newMember.user.username;
+      // Antes se comparaba `nickname || globalName || username`, así que este
+      // log también saltaba cuando el usuario cambiaba su nombre global o su
+      // username (que ahora se registran aparte en el evento userUpdate).
+      const oldNick = oldMember.nickname ?? null;
+      const newNick = newMember.nickname ?? null;
 
       if (oldNick !== newNick) {
         const executorLine = await getExecutorLine(
@@ -59,16 +62,33 @@ module.exports = {
         );
 
         const description =
-          `✏️ **Cambio de apodo**\n` +
+          `✏️ **Cambio de apodo (servidor)**\n` +
           `Usuario: ${userTag}\n` +
-          `Antes: \`${oldNick}\`\n` +
-          `Después: \`${newNick}\`\n` +
+          `Antes: \`${oldNick || '(sin apodo)'}\`\n` +
+          `Después: \`${newNick || '(sin apodo)'}\`\n` +
           `${executorLine}\n` +
           `Hora: <t:${nowTs}:F>`;
 
         await sendAdminEventLog(client, guildId, {
-          title: 'Cambio de apodo/nickname',
+          title: 'Cambio de apodo (servidor)',
           description
+        });
+      }
+
+      /* ──────────────────────────────── */
+      /* 🔹 Cambio de foto de perfil DEL SERVIDOR (avatar por-guild) */
+      /* ──────────────────────────────── */
+      if (oldMember.avatar !== newMember.avatar) {
+        const description =
+          `🖼️ **Cambio de foto de perfil (servidor)**\n` +
+          `Usuario: ${userTag}\n` +
+          `${newMember.avatar ? 'Estableció una foto propia para este servidor.' : 'Quitó la foto propia de este servidor.'}\n` +
+          `Hora: <t:${nowTs}:F>`;
+
+        await sendAdminEventLog(client, guildId, {
+          title: 'Cambio de foto de perfil (servidor)',
+          description,
+          imageUrl: newMember.displayAvatarURL({ size: 256 })
         });
       }
 

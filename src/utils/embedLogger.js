@@ -31,12 +31,13 @@ function getColorByLevel(level) {
  * @param {'info'|'warning'|'error'|'success'} options.level
  * @param {string} options.title
  * @param {string} options.description
+ * @param {string} [options.imageUrl]  imagen grande opcional en el embed
  */
-function buildLogEmbed(client, { level, title, description }) {
+function buildLogEmbed(client, { level, title, description, imageUrl = null }) {
   const color = getColorByLevel(level);
   const avatarUrl = client.user.displayAvatarURL();
 
-  return {
+  const embed = {
     title,
     description,
     color,
@@ -52,6 +53,12 @@ function buildLogEmbed(client, { level, title, description }) {
       text: `Nivel: ${level.toUpperCase()}`
     }
   };
+
+  if (imageUrl) {
+    embed.image = { url: imageUrl };
+  }
+
+  return embed;
 }
 
 /**

@@ -22,8 +22,9 @@ const missingAdminChannelNotified = new Set();
  * @param {Object} options
  * @param {string} options.title
  * @param {string} options.description
+ * @param {string} [options.imageUrl]  imagen grande opcional en el embed
  */
-async function sendAdminEventLog(client, guildId, { title, description }) {
+async function sendAdminEventLog(client, guildId, { title, description, imageUrl = null }) {
   const guild = client.guilds.cache.get(guildId);
   if (!guild) return;
 
@@ -43,7 +44,8 @@ async function sendAdminEventLog(client, guildId, { title, description }) {
     const embed = buildLogEmbed(client, {
       level: 'info',
       title,
-      description
+      description,
+      imageUrl
     });
 
     try {
