@@ -1,6 +1,10 @@
 // src/events/guildMemberAdd.js
 const { sendAdminEventLog } = require('../services/adminEventLogService');
-const { getWelcomeBoostSettings } = require('../services/guildService');
+const {
+  getWelcomeBoostSettings,
+  getAutoRoles
+} = require('../services/guildService');
+const { ensureUserStats, setJoinedAtIfEmpty } = require('../services/statsService');
 const { generateWelcomeImage } = require('../services/welcomeImageService');
 const { applyWelcomeTemplate } = require('../utils/welcomeTemplate');
 const logger = require('../config/logger');
@@ -32,6 +36,39 @@ module.exports = {
         title: 'Nuevo miembro ingresó al servidor',
         description
       });
+
+      // ===========================================
+      //   SEED DE STATS (crea la fila y fija joined_at)
+      //   Antes joined_at nunca se seteaba => days_in_guild
+      //   salía NULL en /rank y /leaderboard.
+      // ===========================================
+      if (!user.bot) {
+        try {
+          await ensureUserStats(guildId, user.id);
+          await setJoinedAtIfEmpty(guildId, user.id, member.joinedAt ?? new Date());
+        } catch (err) {
+          logger.error('Error inicializando stats de nuevo miembro:', err);
+        }
+      }
+
+      // ===========================================
+      //      ASIGNAR ROLES AUTOMÁTICOS
+      //   Va antes del early-return de welcome: los
+      //   auto roles no dependen de la config de bienvenida.
+      //   (Además faltaba importar getAutoRoles, por lo que
+      //    esto lanzaba ReferenceError y nunca asignaba nada.)
+      // ===========================================
+      try {
+        const roles = await getAutoRoles(guildId);
+
+        for (const roleId of roles) {
+          const role = guild.roles.cache.get(roleId);
+          if (!role) continue;
+          await member.roles.add(role).catch(() => {});
+        }
+      } catch (err) {
+        logger.error('Error asignando roles automáticos:', err);
+      }
 
       // Config welcome / boost
       const settings = await getWelcomeBoostSettings(guildId);
@@ -69,23 +106,6 @@ module.exports = {
         });
       } else {
         await channel.send({ content });
-      }
-
-      // ===========================================
-      //      ASIGNAR ROLES AUTOMÁTICOS
-      // ===========================================
-      try {
-        const roles = await getAutoRoles(guild.id);
-
-        for (const roleId of roles) {
-          const role = guild.roles.cache.get(roleId);
-
-          if (!role) continue;
-
-          await member.roles.add(role).catch(() => {});
-        }
-      } catch (err) {
-        logger.error('Error asignando roles automáticos:', err);
       }
     } catch (err) {
       logger.error('Error en guildMemberAdd event:', err);

@@ -75,6 +75,22 @@ async function createApplication({
 }
 
 /**
+ * Elimina una postulación por ID.
+ * Se usa para limpiar postulaciones "pending" que quedaron huérfanas
+ * porque falló la creación del canal de ticket.
+ */
+async function deleteApplication(applicationId) {
+  try {
+    await pool.execute(
+      `DELETE FROM recruitment_applications WHERE id = ?`,
+      [applicationId]
+    );
+  } catch (err) {
+    logger.error('Error deleteApplication:', err);
+  }
+}
+
+/**
  * Vincula el ticket (canal) a la postulación.
  */
 async function linkApplicationTicket(applicationId, channelId) {
@@ -150,6 +166,7 @@ module.exports = {
   setRecruitTicketCategory,
   getRecruitSettings,
   createApplication,
+  deleteApplication,
   linkApplicationTicket,
   getApplicationByChannel,
   setApplicationStatusByChannel,

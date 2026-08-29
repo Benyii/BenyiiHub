@@ -12,10 +12,17 @@ const {
  * Luego recalcula XP y nivel.
  */
 async function incrementMessageCount(client, guildId, userId) {
+  // INSERT ... ON DUPLICATE KEY: crea la fila si el usuario aún no la tiene
+  // (antes era un UPDATE que perdía silenciosamente los mensajes de miembros
+  //  que todavía no habían entrado nunca a un canal de voz).
   const sql = `
-    UPDATE user_stats
-    SET messages_count = messages_count + 1
-    WHERE guild_id = ? AND user_id = ?
+    INSERT INTO user_stats (
+      guild_id, user_id, messages_count, voice_seconds, voice_sessions,
+      last_join_voice_at, joined_at, xp, lvl
+    )
+    VALUES (?, ?, 1, 0, 0, NULL, NULL, 0, 1)
+    ON DUPLICATE KEY UPDATE
+      messages_count = messages_count + 1
   `;
   try {
     await pool.execute(sql, [guildId, userId]);

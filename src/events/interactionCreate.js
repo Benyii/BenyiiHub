@@ -17,6 +17,7 @@ const { handleRolePanelButton } = require('../services/rolePanelService');
 const {
   getRecruitSettings,
   createApplication,
+  deleteApplication,
   linkApplicationTicket
 } = require('../services/recruitmentService');
 
@@ -187,12 +188,27 @@ module.exports = {
           });
         }
 
-        const ticketChannel = await guild.channels.create({
-          name: channelName,
-          type: ChannelType.GuildText,
-          parent: category.id,
-          permissionOverwrites: overwrites
-        });
+        let ticketChannel;
+        try {
+          ticketChannel = await guild.channels.create({
+            name: channelName,
+            type: ChannelType.GuildText,
+            parent: category.id,
+            permissionOverwrites: overwrites
+          });
+        } catch (channelErr) {
+          // Si no se pudo crear el canal, borramos la postulación recién
+          // creada para no dejarla huérfana en estado "pending" sin ticket.
+          logger.error('Error creando canal de ticket de reclutamiento:', channelErr);
+          await deleteApplication(applicationId);
+          await interaction.reply({
+            content:
+              '❌ No se pudo crear el canal del ticket (revisa los permisos del bot ' +
+              'sobre la categoría configurada). Inténtalo de nuevo o contacta a un administrador.',
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
 
         // 3) Vincular canal de ticket a la postulación
         await linkApplicationTicket(applicationId, ticketChannel.id);
